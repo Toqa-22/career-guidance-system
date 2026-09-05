@@ -176,15 +176,15 @@
 
                 <input type="text" id="specializationInput" class="hidden-element" placeholder="current post" required>
                 
-                <div class="dynamic-uploads-wrapper" id="dynamicUploadsContainer"></div>
                 <div id="firstLogEntryContainer" class="hidden-element cq-registration-field">
-                    <label class="cq-question-text">Log your first session (optional)</label>
-                    <input type="text" id="firstLogTitle" class="cq-answer-input" placeholder="Title" style="margin-bottom:10px;">
+                    <label class="cq-question-text">Log your first session</label>
+                    <input type="text" id="firstLogTitle" class="cq-answer-input" placeholder="Title" style="margin-bottom:10px;" required>
                     <div style="display:flex; gap:10px;">
-                        <input type="date" id="firstLogDate" class="cq-answer-input" style="flex:1;">
-                        <input type="time" id="firstLogTime" class="cq-answer-input" style="flex:1;">
+                        <input type="date" id="firstLogDate" class="cq-answer-input" style="flex:1;" required>
+                        <input type="time" id="firstLogTime" class="cq-answer-input" style="flex:1;" required>
                     </div>
                 </div>
+                <div class="dynamic-uploads-wrapper" id="dynamicUploadsContainer"></div>
                 <div id="customQuestionsContainer"></div>
             </div>
             
