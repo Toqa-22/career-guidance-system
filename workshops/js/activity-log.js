@@ -3,6 +3,73 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Same HSL shading helpers as workshops.js, so this page derives the exact
+// same light/dark shades from a course's chosen color — previously this
+// page only ever set --course-theme itself, leaving --course-theme-light
+// and --course-theme-dark undefined, which is what the hero and the
+// featured card's gradients actually depend on.
+function hexToHsl(hex) {
+    hex = (hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            default: h = (r - g) / d + 4;
+        }
+        h /= 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    let r, g, b;
+    if (s === 0) {
+        r = g = b = l;
+    } else {
+        const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1 / 3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1 / 3);
+    }
+    const toHex = v => Math.round(v * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+function shadeColor(hex, lightnessDeltaPct) {
+    const hsl = hexToHsl(hex);
+    if (!hsl) return hex;
+    const l = Math.min(96, Math.max(6, hsl.l + lightnessDeltaPct));
+    return hslToHex(hsl.h, hsl.s, l);
+}
+const DEFAULT_THEME_COLOR = '#7C3AED';
+
+function applyCourseTheme(rawColor) {
+    const base = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(rawColor || '') ? rawColor : DEFAULT_THEME_COLOR;
+    const root = document.documentElement.style;
+    root.setProperty('--course-theme', base);
+    root.setProperty('--course-theme-light', shadeColor(base, 16));
+    root.setProperty('--course-theme-dark', shadeColor(base, -16));
+}
+
 const params = new URLSearchParams(window.location.search);
 const courseId = params.get('course_id');
 let currentRegistrationId = null;
@@ -28,7 +95,7 @@ if (!courseId) {
         // Matches the same background this activity's registration page
         // uses, so the two feel like the same place rather than a jump to
         // something generic.
-        if (data.theme_color) document.documentElement.style.setProperty('--course-theme', data.theme_color);
+        if (data.theme_color) applyCourseTheme(data.theme_color);
         document.body.classList.remove('theme-loading');
         document.getElementById('courseNameLine').textContent = `${data.name} — enter your staff number to check in.`;
 
