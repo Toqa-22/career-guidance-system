@@ -3,198 +3,192 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Workshops &amp; Training</title>
+<title>Report</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/workshops.css">
-<link rel="stylesheet" href="css/multiselect.css">
-<link rel="stylesheet" href="css/notifications.css">
-<link rel="stylesheet" href="css/responsive.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/report.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
 <!-- Loaded early so alert() is already replaced before any page script runs -->
-<script src="js/notify.js"></script>
+<script src="../js/notify.js"></script>
+<!-- Plain <script> tags, NOT type="module" — xlsx-js-style must be loaded this
+     way to expose the global XLSX object; excel-export.js depends on it -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../js/excel-export.js"></script>
+<!-- Plain <script> tags too — the Custom Field Report builds its PDF client-side -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="../js/theme-rotator.js"></script>
 </head>
-<body class="full-bleed theme-loading">
+<body>
 
-<!-- ============ LOADING OVERLAY ============ -->
-<!-- Shown until js/workshops.js knows the real course color, then fades out
-     together with the hero fading in underneath (see the "theme-loading"
-     class rules in css/workshops.css) — hides the color switch entirely
-     instead of showing the default purple first. -->
-<div class="page-loading-overlay" aria-hidden="true">
-    <div class="page-loading-spinner"></div>
-</div>
-
-<!-- ============ HERO ============ -->
-<section class="hero">
-    <div class="hero-shape hero-shape-1" aria-hidden="true"></div>
-    <div class="hero-shape hero-shape-2" aria-hidden="true"></div>
-    <div class="hero-shape hero-shape-3" aria-hidden="true"></div>
-    <div class="hero-inner">
-        <div class="brand-icon" aria-hidden="true">
-            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
         </div>
-        <h1 class="hero-title"><span class="hero-title-line">Ibra Hospital</span><br><span class="hero-title-line">Professional Development</span><br><span class="hero-title-line">and Career <span class="accent">Guidance</span></span></h1>
-        <p class="hero-tagline">Learn, Grow, Make an impact</p>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link active" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
     </div>
-</section>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
 
-<div class="container">
-
-        <!-- ============ FEATURED WORKSHOP ============ -->
-        <section id="featuredSection" class="featured hidden-element">
-            <div class="featured-visual" aria-hidden="true">
-                <svg viewBox="0 0 64 64" width="40" height="40" fill="none">
-                  <circle cx="32" cy="32" r="22" stroke="white" stroke-width="4"/>
-                  <path d="M32 20V33L40 38" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+        <div class="report-tools">
+            <div class="report-tool-card">
+                <h3>Report by Staff Number &amp; Date Range</h3>
+                <p>Export registration records for one staff number, optionally narrowed to a date range.</p>
+                <div class="report-tool-row">
+                    <div class="report-field">
+                        <label class="report-field-label">Staff Number</label>
+                        <input type="text" id="reportStaffNumber" placeholder="Staff Number">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">From</label>
+                        <input type="date" id="reportStaffFrom">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">To</label>
+                        <input type="date" id="reportStaffTo">
+                    </div>
+                    <button type="button" class="btn-action btn-add" onclick="exportStaffReport()">Export Excel</button>
+                </div>
             </div>
-            <div class="featured-content">
-                <div class="eyebrow">Featured Workshop</div>
-                <h2 class="featured-title" id="featuredTitle"></h2>
-                <p class="featured-description" id="featuredDescription"></p>
-                <div class="featured-meta" id="featuredMeta"></div>
-                <button type="button" class="featured-cta" id="featuredCta">View &amp; Register →</button>
+
+            <div class="report-tool-card">
+                <h3>Full Report by Date Range</h3>
+                <p>Export every registration record within a date range, optionally for one course.</p>
+                <div class="report-tool-row">
+                    <div class="report-field">
+                        <label class="report-field-label">Course</label>
+                        <select id="reportRangeCourse"><option value="">All Activity</option></select>
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">From</label>
+                        <input type="date" id="reportRangeFrom">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">To</label>
+                        <input type="date" id="reportRangeTo">
+                    </div>
+                    <button type="button" class="btn-action btn-add" onclick="exportDateRangeReport()">Export Excel</button>
+                    <button type="button" class="btn-action btn-add" onclick="exportDateRangeReportPdf()">Export PDF</button>
+                </div>
             </div>
-        </section>
 
-        <!-- ============ REGISTRATION FORM ============ -->
-        <section id="register" class="register-section">
-            <div class="section-heading">
-                <h2>Register for a Workshop</h2>
-                <p>Pick your session and fill in your details.</p>
-            </div>
-            <div class="form-card">
-            <div class="form-grid">
-                <div class="form-group-full">
-                    <label for="courseSelect">Choose Target Session Course</label>
-                    <select id="courseSelect" required>
-                        <option value="">-- Choose Course --</option>
-                    </select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="institutionFieldWrapper">
-                    <label for="institutionTypeSelect">Institution</label>
-                    <select id="institutionTypeSelect" required>
-                        <option value="">-- Choose Institution Option --</option>
-                        <option value="Ibra">Ibra hospital</option>
-                        <option value="Other">Other hospital and health center</option>
-                    </select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="departmentContainer">
-                    <label for="departmentSelect">Select Department (Max chairs per department is linked to config validation)</label>
-                    <select id="departmentSelect">
-                        <option value="">-- Choose Department --</option>
-                    </select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="otherInstitutionContainer">
-                    <label for="otherInstitutionInput">Specify Institution Name</label>
-                    <select id="otherInstitutionInput">
-                        <option value="">-- Choose Corporate / Academic Entity --</option>
-                        <option value="Al Mudhaibi Health Center">Al Mudhaibi Health Center</option>
-                        <option value="Wadi Bani Khalid Hospital">Wadi Bani Khalid Hospital</option>
-                        <option value="Sinaw Health Hospital">Sinaw Health Hospital</option>
-                        <option value="Ibra Health Center">Ibra Health Center</option>
-                        <option value="Sinaw Health Center">Sinaw Health Center</option>
-                        <option value="Al Yahmadi Health Center">Al Yahmadi Health Center</option>
-                        <option value="Al Mudhaibi Health Center (New)">Al Mudhaibi Health Center (New)</option>
-                        <option value="Samad Al Shaan Hospital">Samad Al Shaan Hospital</option>
-                        <option value="Bidiyah Hospital">Bidiyah Hospital</option>
-                        <option value="Al Qabil Health Center">Al Qabil Health Center</option>
-                        <option value="Wadi Dama Wa At Taiyyin Hospital">Wadi Dama Wa At Taiyyin Hospital</option>
-                        <option value="Al Dhahir Health Center">Al Dhahir Health Center</option>
-                        <option value="Al Jaza Health Center">Al Jaza Health Center</option>
-                        <option value="Sumayyan Health Center">Sumayyan Health Center</option>
-                        <option value="Al Jardaa Health Center">Al Jardaa Health Center</option>
-                        <option value="Al Aflaj Health Center">Al Aflaj Health Center</option>
-                        <option value="Miss Health Centre">Miss Health Centre</option>
-                        <option value="Dma Health Centre">Dma Health Centre</option>
-                        <option value="Wadi Naam Health Center">Wadi Naam Health Center</option>
-                        <option value="Other (Please Specify)">Other (Please Specify)</option>
-                    </select>
-                    <input type="text" id="otherInstitutionFreeText" class="hidden-element" placeholder="Type your institution / health center name" style="margin-top: 10px;">
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_job_level">
-                    <label for="reg_job_level">Job Level</label>
-                    <select id="reg_job_level" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_nationality">
-                    <label for="reg_nationality">Nationality</label>
-                    <select id="reg_nationality" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_education_qualification">
-                    <label for="reg_education_qualification">Highest Educational Qualification</label>
-                    <select id="reg_education_qualification" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_experience_years">
-                    <label for="reg_experience_years">Experience Years</label>
-                    <select id="reg_experience_years" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_organization">
-                    <label for="reg_organization">Organization</label>
-                    <select id="reg_organization" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_directorate">
-                    <label for="reg_directorate">Directorate</label>
-                    <select id="reg_directorate" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_program_type">
-                    <label for="reg_program_type">Type of Program</label>
-                    <select id="reg_program_type" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <div class="form-group-full hidden-element" id="regFieldWrapper_attendance_nature">
-                    <label for="reg_attendance_nature">Nature of Attendance</label>
-                    <select id="reg_attendance_nature" required><option value="">-- Choose --</option></select>
-                </div>
-
-                <input type="text" id="staffName" class="hidden-element" placeholder="Your Full Name" required>
-                <input type="text" id="staffNumber" class="hidden-element" placeholder="Staff Number" required>
-                <input type="tel" id="phoneNumber" class="hidden-element" placeholder="Phone Number" required>
-                
-                <select id="sexSelect" class="hidden-element" required>
-                    <option value="">-- Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                </select>
-                
-                <div id="designationFieldWrapper" class="hidden-element">
-                    <select id="designationSelect" required>
-                        <option value="">-- Designation --</option>
-                    </select>
-                    <input type="text" id="otherDesignationInput" placeholder="Specify Designation" class="hidden-element" style="margin-top: 10px;">
-                </div>
-
-                <input type="text" id="specializationInput" class="hidden-element" placeholder="current post" required>
-                
-                <div id="firstLogEntryContainer" class="hidden-element cq-registration-field">
-                    <label class="cq-question-text">Log your first session</label>
-                    <input type="text" id="firstLogTitle" class="cq-answer-input" placeholder="Title" style="margin-bottom:10px;" required>
-                    <div style="display:flex; gap:10px;">
-                        <input type="date" id="firstLogDate" class="cq-answer-input" style="flex:1;" required>
-                        <input type="time" id="firstLogTime" class="cq-answer-input" style="flex:1;" required>
+            <div class="report-tool-card">
+                <h3>Custom Field Report (PDF)</h3>
+                <p>Pick a course and/or date range, then choose which fields to break participants down by. Each field becomes its own table of value → participant count, with a total.</p>
+                <div class="report-tool-row">
+                    <div class="report-field">
+                        <label class="report-field-label">Course</label>
+                        <select id="reportFieldsCourse"><option value="">All Activity</option></select>
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">From</label>
+                        <input type="date" id="reportFieldsFrom">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">To</label>
+                        <input type="date" id="reportFieldsTo">
                     </div>
                 </div>
-                <div class="dynamic-uploads-wrapper" id="dynamicUploadsContainer"></div>
-                <div id="customQuestionsContainer"></div>
+                <div class="report-fields-grid">
+                    <label><input type="checkbox" class="report-field-checkbox" value="designation_snapshot"> Designations</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="job_level_snapshot"> Job Level</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="nationality_snapshot"> Nationality</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="education_qualification_snapshot"> Highest Educational Qualification</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="experience_years_snapshot"> Experience Years</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="organization_snapshot"> Organization</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="directorate_snapshot"> Directorate</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="program_type_snapshot"> Type of Program</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="attendance_nature_snapshot"> Nature of Attendance</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="institution_name_snapshot"> Institutional</label>
+                </div>
+                <div class="report-tool-row" style="margin-top: 14px;">
+                    <button type="button" class="btn-action btn-add" onclick="generateFieldsReportPdf()">Generate Report</button>
+                </div>
+                <p id="reportFieldsNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
             </div>
-            
-            <div class="btn-row hidden-element" id="submitRowContainer">
-                <button class="btn-register" id="regBtn">Register Now</button>
-            </div>
-            </div>
-        </section>
-    </div>
 
-<script type="module" src="js/workshops.js"></script>
+            <div class="report-tool-card">
+                <h3>Hall Activity Report (PDF)</h3>
+                <p>Choose a hall and a reservation type, then a period — get a logo-headed PDF with the activity list and a count summary.</p>
+                <div class="report-tool-row">
+                    <div class="report-field">
+                        <label class="report-field-label">Hall</label>
+                        <select id="hallReportHallSelect">
+                            <option value="">All Halls</option>
+                            <option value="Ibn Al-Thhabi">Ibn Al-Thhabi</option>
+                            <option value="Library">Library</option>
+                        </select>
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">Type of Reservation</label>
+                        <select id="hallReportTypeSelect">
+                            <option value="">All Types</option>
+                            <option value="Meeting">Meeting</option>
+                            <option value="Lecture">Lecture</option>
+                            <option value="Workshop">Workshop</option>
+                            <option value="CME">CME</option>
+                        </select>
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">From</label>
+                        <input type="date" id="hallReportFrom">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">To</label>
+                        <input type="date" id="hallReportTo">
+                    </div>
+                    <button type="button" class="btn-action btn-add" onclick="generateHallActivityReportPdf()">Generate Report</button>
+                </div>
+                <p id="hallReportNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+            </div>
+
+            <div class="report-tool-card">
+                <h3>Department Staffing Chart (PDF)</h3>
+                <p>A PDF with total staff vs. workshop attendees per department, a coverage percentage chart, and a full breakdown table.</p>
+                <div class="report-tool-row">
+                    <button type="button" class="btn-action btn-add" onclick="generateDepartmentChartPdf()">Generate Report</button>
+                </div>
+                <p id="deptChartNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+                <canvas id="deptChartOffscreen" width="900" height="500" style="display:none;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/report.js"></script>
+<script src="../js/sidebar.js"></script>
 </body>
 </html>
