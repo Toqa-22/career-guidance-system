@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  waiting.html — قائمة الانتظار
+  ============================================================================
+  الغرض: عرض المتدربين الذين أُضيفوا لقسم معيّن من صفحة التسجيل (register.html)
+  دون تحديد فترة تدريب فورية (خيار «إضافة إلى قائمة الانتظار» في كل صف قسم
+  بنموذج التسجيل). كل سجل هنا هو is_waitlist = true في جدول students —
+  بلا training_start/training_end بعد.
+
+  الإجراء الرئيسي هنا هو زر «📅 تحديد الفترة»: يفتح نفس نافذة التعديل
+  المستخدمة في لوحة الإدارة (showEditStudentModal في js/ui.js)، وعند الحفظ
+  يُستدعى updateStudentRecord() الذي يضبط is_waitlist = false صراحة — فينتقل
+  السجل تلقائياً ليظهر في dashboard.html ويختفي من هذه الصفحة، دون أي حذف
+  وإعادة إدراج يدوي.
+
+  التبعيات (بترتيب التحميل الإلزامي في أسفل الصفحة): نفس تبعيات dashboard.html
+  تماماً عدا js/report.js (غير مطلوب هنا) واستبدال js/dashboard.js بـ js/waiting.js.
+
+  راجع أيضاً: register.html (صفحة التسجيل، مصدر سجلات هذه القائمة)،
+  dashboard.html (وجهة السجلات بعد تحديد فترتها)، css/dashboard.css (تُعاد
+  الاستفادة من أنماط الجدول والفلاتر والحالة منها هنا لعدم تكرار الأنماط).
+  ============================================================================
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>قائمة الانتظار | قسم التطوير والتوجيه المهني</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+
+<!-- ==========================================================================
+     حارس الدخول: يُنفَّذ فوراً كأول شيء في الصفحة (قبل أي CSS أو سكربت خارجي
+     آخر) لمنع أي وميض لمحتوى محمي قبل التحقق. يفحص الجلسة المحلية المحفوظة
+     في localStorage بعد تسجيل الدخول (راجع js/auth.js لمنطق الحفظ الكامل)،
+     ويُعيد التوجيه فوراً لصفحة index.html (صفحة تسجيل الدخول) إن كانت غير
+     موجودة أو منتهية الصلاحية. مكرَّر بنفس الشكل تحديداً في أعلى
+     register.html وdashboard.html وreports.html.
+     ========================================================================== -->
+<script>
+(function(){
+  var AUTH_KEY = "ibra_admin_session";
+  var MAX_HOURS = 12;
+  try {
+    var raw = localStorage.getItem(AUTH_KEY);
+    var session = raw ? JSON.parse(raw) : null;
+    var valid = !!(session && session.username && session.loginAt &&
+      ((Date.now() - session.loginAt) / 3600000 <= MAX_HOURS));
+    if (!valid){
+      localStorage.removeItem(AUTH_KEY);
+      location.replace("../index.html");
+    }
+  } catch (e){
+    location.replace("../index.html");
+  }
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/training-sidebar.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/auth.css">
+<script src="js/theme-rotator.js"></script>
+</head>
+<body>
+
+  <!-- الشريط العلوي: نفس بنية register.html وdashboard.html تماماً -->
+  <div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="فتح/إغلاق القائمة">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+            <div class="admin-sidebar-brand">
+                <div class="admin-brand-icon"><img src="../assets/logo.png" alt="شعار المستشفى" onerror="handleLogoImgError(this)"></div>
+                <p class="sidebar-username" id="sidebarUsername"></p>
+            </div>
+            <nav class="admin-sidebar-nav">
+                <a class="admin-nav-link" href="home.html">الرئيسية</a>
+                <a class="admin-nav-link" href="register.html">تسجيل متدرب</a>
+                <a class="admin-nav-link active" href="waiting.html">قائمة الانتظار</a>
+                <a class="admin-nav-link" href="dashboard.html">لوحة الإدارة</a>
+                <a class="admin-nav-link" href="reports.html">تقارير</a>
+            </nav>
+            <a class="admin-nav-logout logout-link" href="#" id="logoutLink">تسجيل الخروج</a>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+  <main class="dash-wrap">
+
+    <div class="dash-head">
+      <div>
+        <h2>قائمة الانتظار</h2>
+        <p>المتدربون الذين أُضيفوا لأحد الأقسام دون تحديد فترة تدريب بعد</p>
+      </div>
+    </div>
+
+    <!-- شريط إحصاء سريع لعدد المتدربين في قائمة الانتظار حالياً -->
+    <div class="waiting-stat-banner">
+      <div class="w-icon">⏳</div>
+      <div class="w-text">
+        <strong id="waitingCount">0</strong>
+        <p>متدرب بانتظار تحديد فترة التدريب</p>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         بحث سريع بالاسم والقسم — فلترة محلية بسيطة على القائمة المحمّلة، بلا
+         حاجة لإعادة الاتصال بالخادم في كل مرة (على نمط لوحة الإدارة تماماً).
+         ========================================================================== -->
+    <div class="filters-panel">
+      <h3>البحث والتصفية</h3>
+      <div class="filters-grid filters-grid-narrow">
+        <div class="f-field">
+          <label>اسم الطالب</label>
+          <input type="text" id="w_name" placeholder="ابحث بالاسم">
+        </div>
+        <div class="f-field">
+          <label>القسم</label>
+          <select id="w_department"><option value="">جميع الأقسام</option></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         جدول قائمة الانتظار: يُبنى بالكامل من renderWaitingTable() في
+         js/waiting.js. عمود «الإجراءات» يحوي زري «تحديد الفترة» و«حذف».
+         ========================================================================== -->
+    <div class="table-panel">
+      <div class="table-scroll-hint" id="tableScrollHint">↔ مرر أفقياً لعرض كل أعمدة الجدول</div>
+      <div class="table-scroll">
+        <table class="students-table waiting-table" id="waitingTable">
+          <thead>
+            <tr>
+              <th>اسم الطالب</th>
+              <th>رقم الهاتف</th>
+              <th>الكلية</th>
+              <th>التخصص</th>
+              <th>القسم</th>
+              <th>تاريخ التسجيل</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="waitingTableBody">
+            <!-- تُملأ ديناميكياً بواسطة renderWaitingTable() في js/waiting.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+    </div>
+</div>
+
+  <!-- ==========================================================================
+       ترتيب تحميل السكربتات مهم جداً: كل ملف يعتمد على ما قبله مباشرة.
+       ========================================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/departments.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/waiting.js"></script>
+<script src="js/training-sidebar.js"></script>
+</body>
+</html>

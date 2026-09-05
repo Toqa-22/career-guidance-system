@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deletion Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin-pages.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<script src="../js/theme-rotator.js"></script>
+<script src="../js/notify.js"></script>
+</head>
+<body>
+
+<header class="admin-page-header">
+    <div class="admin-header-shape admin-header-shape-1"></div>
+    <div class="admin-header-shape admin-header-shape-2"></div>
+    <div class="admin-header-shape admin-header-shape-3"></div>
+    <div class="admin-header-shape admin-header-shape-4"></div>
+    <div class="admin-page-header-left">
+        <a class="admin-page-back" href="../hub.html">← Hub</a>
+        <h1>Admin</h1>
+        <nav class="admin-page-tabs">
+            <a class="admin-page-tab" href="users.html">Users</a>
+            <a class="admin-page-tab" href="logins.html">Login History</a>
+            <a class="admin-page-tab" href="institutions.html">Ibra Department</a>
+            <a class="admin-page-tab" href="halls.html">Halls</a>
+            <a class="admin-page-tab" href="add-institution.html">Add Institution</a>
+            <a class="admin-page-tab active" href="deletion-log.html">Deletion Log</a>
+        </nav>
+    </div>
+    <a class="admin-logout-link" href="#" onclick="logoutHubAdmin(); return false;">Logout</a>
+</header>
+
+<div class="admin-page-body">
+    <div class="admin-card">
+        <h2>Deletion Log</h2>
+        <p style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
+            Every course or registration removal from the Workshops system — who removed it, when, and why.
+        </p>
+        <table class="admin-table">
+            <thead><tr><th>Date &amp; Time</th><th>User</th><th>Type</th><th>What</th><th>Reason</th></tr></thead>
+            <tbody id="deletionLogBody">
+                <tr class="admin-empty-row"><td colspan="5">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="module" src="../js/admin-deletion-log.js"></script>
+</body>
+</html>

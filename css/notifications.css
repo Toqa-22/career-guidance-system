@@ -1,0 +1,151 @@
+/* ===== Card-style toast notifications (replaces the native alert() popup) ===== */
+#toastContainer {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 360px;
+    pointer-events: none;
+}
+
+.toast-card {
+    pointer-events: auto;
+    background: white;
+    border-radius: 16px;
+    padding: 16px 16px 16px 18px;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .18);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border-left: 5px solid var(--dynamic-primary, #7C3AED);
+    font-size: 14px;
+    line-height: 1.45;
+    color: #0f172a;
+    animation: toastIn .35s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+
+.toast-card.toast-leaving {
+    animation: toastOut .25s ease forwards;
+}
+
+.toast-icon {
+    font-size: 20px;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    flex: 1;
+    word-break: break-word;
+    padding-top: 1px;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #94a3b8;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+    padding: 0;
+    margin-left: 4px;
+}
+.toast-close:hover { color: #334155; }
+
+/* Progress bar showing time left before auto-dismiss */
+.toast-progress {
+    position: absolute;
+    left: 0; bottom: 0;
+    height: 3px;
+    border-radius: 0 0 0 16px;
+    background: currentColor;
+    opacity: .35;
+    animation-name: toastProgress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+.toast-card { position: relative; overflow: hidden; }
+
+.toast-success { border-left-color: #16a34a; }
+.toast-success .toast-progress { color: #16a34a; }
+
+.toast-error { border-left-color: #dc2626; }
+.toast-error .toast-progress { color: #dc2626; }
+
+.toast-warning { border-left-color: #d97706; }
+.toast-warning .toast-progress { color: #d97706; }
+
+.toast-info { border-left-color: var(--dynamic-primary, #7C3AED); }
+.toast-info .toast-progress { color: var(--dynamic-primary, #7C3AED); }
+
+@keyframes toastIn {
+    from { transform: translateX(120%) scale(.95); opacity: 0; }
+    to   { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes toastOut {
+    from { transform: translateX(0) scale(1); opacity: 1; max-height: 200px; margin-bottom: 0; }
+    to   { transform: translateX(120%) scale(.95); opacity: 0; }
+}
+@keyframes toastProgress {
+    from { width: 100%; }
+    to   { width: 0%; }
+}
+
+@media (max-width: 480px) {
+    #toastContainer {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        max-width: none;
+        width: auto;
+    }
+}
+
+/* ===== Small confirm card (replaces the native window.confirm()) — same
+   toast container/size/animation as notifications, not a full-page modal ===== */
+.confirm-toast-card { border-left-color: var(--dynamic-primary, #7C3AED); align-items: flex-start; }
+.confirm-toast-body { flex: 1; }
+.confirm-toast-card .toast-message { padding-top: 0; margin-bottom: 12px; font-weight: 600; }
+.confirm-actions { display: flex; gap: 8px; }
+.confirm-btn {
+    flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit; border: none; transition: filter .15s ease, background .15s ease;
+}
+.confirm-cancel { background: #f1f5f9; color: #475569; }
+.confirm-cancel:hover { background: #e2e8f0; }
+.confirm-ok { background: var(--dynamic-primary, #7C3AED); color: white; }
+.confirm-ok:hover { filter: brightness(1.08); }
+
+/* ===== Form card (replaces window.prompt()) ===== */
+.form-toast-title { font-weight: 700; margin-bottom: 14px; font-size: 15px; color: #0f172a; }
+.form-toast-label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 4px; }
+.form-toast-input {
+    width: 100%; padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 8px;
+    font-size: 13.5px; font-family: inherit; margin-bottom: 12px; box-sizing: border-box;
+}
+.form-toast-input:focus { outline: none; border-color: var(--dynamic-primary, #7C3AED); }
+
+/* ===== Reason/form modal — centered, unlike the toast notifications ===== */
+.form-modal-overlay {
+    position: fixed; inset: 0; z-index: 100000;
+    background: rgba(15, 23, 42, .45);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: formModalOverlayIn .2s ease forwards;
+}
+.form-modal-overlay.form-modal-leaving { animation: formModalOverlayOut .18s ease forwards; }
+.form-modal-card {
+    background: white; border-radius: 18px; padding: 26px 24px 22px;
+    max-width: 400px; width: 100%;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .3);
+    animation: formModalCardIn .22s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+@keyframes formModalOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes formModalOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes formModalCardIn { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }

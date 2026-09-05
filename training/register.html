@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  register.html — صفحة تسجيل المتدربين
+  ============================================================================
+  الغرض: نموذج تسجيل عربي (RTL) يسمح لموظف قسم التطوير والتوجيه المهني بتسجيل
+  متدرب جديد. يدعم اختيار عدة أقسام دفعة واحدة (عبر فئة رئيسية ثم قسم أو أكثر)
+  بفترة تدريب مستقلة لكل قسم مختار — عند الحفظ يُنشأ سجل منفصل في قاعدة
+  البيانات لكل قسم، وليس سجلاً واحداً يحوي كل الأقسام.
+
+  هذه هي الوجهة الرئيسية للنظام بعد تسجيل الدخول من index.html (صفحة الدخول
+  الآن — راجع تعليقها لتفاصيل آلية التحقق الكاملة عبر verify_admin_login()).
+
+  التبعيات (بترتيب التحميل الإلزامي في أسفل الصفحة):
+    1) عميل Supabase JS من CDN
+    2) js/config.js       — بيانات الاتصال بمشروع Supabase
+    3) js/departments.js  — الفئات والأقسام
+    4) js/ui.js           — عناصر واجهة مشتركة (Toast، تنسيق التواريخ...)
+    5) js/supabase.js     — الاتصال الفعلي بقاعدة البيانات
+    6) js/app.js          — منطق هذه الصفحة تحديداً (يُشغَّل عند DOMContentLoaded)
+
+  راجع أيضاً: index.html (صفحة تسجيل الدخول)، dashboard.html (لوحة إدارة
+  المتدربين)، css/style.css (الأنماط المشتركة بين الصفحات).
+  ============================================================================
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل المتدربين | قسم التطوير والتوجيه المهني</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+
+<!-- ==========================================================================
+     حارس الدخول: يُنفَّذ فوراً كأول شيء في الصفحة (قبل أي CSS أو سكربت خارجي
+     آخر) لمنع أي وميض لمحتوى محمي قبل التحقق. يفحص الجلسة المحلية المحفوظة
+     في localStorage بعد تسجيل الدخول (راجع js/auth.js لمنطق الحفظ الكامل)،
+     ويُعيد التوجيه فوراً لصفحة index.html (صفحة تسجيل الدخول الآن) إن كانت
+     غير موجودة أو منتهية الصلاحية. مكرَّر بنفس الشكل تحديداً في أعلى
+     waiting.html وdashboard.html وreports.html.
+     ========================================================================== -->
+<script>
+(function(){
+  var AUTH_KEY = "ibra_admin_session";
+  var MAX_HOURS = 12;
+  try {
+    var raw = localStorage.getItem(AUTH_KEY);
+    var session = raw ? JSON.parse(raw) : null;
+    var valid = !!(session && session.username && session.loginAt &&
+      ((Date.now() - session.loginAt) / 3600000 <= MAX_HOURS));
+    if (!valid){
+      localStorage.removeItem(AUTH_KEY);
+      location.replace("../index.html");
+    }
+  } catch (e){
+    location.replace("../index.html");
+  }
+})();
+</script>
+
+<!-- خط Cairo العربي من Google Fonts، يُستخدم في كل الصفحة عبر css/style.css -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/training-sidebar.css">
+<link rel="stylesheet" href="css/auth.css">
+<link rel="stylesheet" href="css/waiting-alert.css">
+<script src="js/theme-rotator.js"></script>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       الشريط العلوي: الشعار + اسم الجهة + التنقل بين صفحات النظام
+       مشترك بصرياً مع dashboard.html (نفس البنية تماماً، فقط الرابط النشط يختلف)
+       ========================================================================== -->
+  <div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="فتح/إغلاق القائمة">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+            <div class="admin-sidebar-brand">
+                <div class="admin-brand-icon"><img src="../assets/logo.png" alt="شعار المستشفى" onerror="handleLogoImgError(this)"></div>
+                <p class="sidebar-username" id="sidebarUsername"></p>
+            </div>
+            <nav class="admin-sidebar-nav">
+                <a class="admin-nav-link" href="home.html">الرئيسية</a>
+                <a class="admin-nav-link active" href="register.html">تسجيل متدرب</a>
+                <a class="admin-nav-link" href="waiting.html">قائمة الانتظار</a>
+                <a class="admin-nav-link" href="dashboard.html">لوحة الإدارة</a>
+                <a class="admin-nav-link" href="reports.html">تقارير</a>
+            </nav>
+            <a class="admin-nav-logout logout-link" href="#" id="logoutLink">تسجيل الخروج</a>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+  <main class="register-page">
+    <div class="register-shell">
+      <div class="eyebrow">نظام داخلي معتمد</div>
+
+      <section class="register-card">
+        <h2>تسجيل المتدربين</h2>
+        <p class="subtitle">يرجى تعبئة جميع الحقول أدناه بدقة لإتمام عملية تسجيل المتدرب.</p>
+
+        <!--
+          novalidate: نُعطّل التحقق الافتراضي من المتصفح لأن js/app.js يقوم
+          بتحقق مخصص بالكامل (validateForm في app.js) مع رسائل عربية ووضع
+          "has-error" البصري، بدل رسائل المتصفح الإنجليزية الافتراضية.
+        -->
+        <form id="registerForm" novalidate>
+          <div class="form-grid">
+
+            <!-- ===== بيانات الطالب الأساسية ===== -->
+
+            <div class="field full" data-field="student_name">
+              <label>اسم الطالب <span class="req">*</span></label>
+              <input type="text" id="student_name" placeholder="أدخل الاسم الكامل" autocomplete="off">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <div class="field" data-field="phone">
+              <label>رقم الهاتف <span class="req">*</span></label>
+              <!-- type=number + inputmode=numeric لإظهار لوحة مفاتيح رقمية على الجوال؛
+                   التحقق الفعلي (أرقام فقط، طول لا يقل عن 6) يتم في validateForm() -->
+              <input type="number" id="phone" placeholder="9xxxxxxx" inputmode="numeric">
+              <div class="error-msg">يرجى إدخال رقم هاتف صحيح</div>
+            </div>
+
+            <div class="field" data-field="specialization">
+              <label>التخصص <span class="req">*</span></label>
+              <input type="text" id="specialization" placeholder="مثال: تمريض عام" autocomplete="off">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <!-- حقل الكلية/الجامعة: إلزامي (بناءً على طلب القسم)، ويظهر لاحقاً
+                 في صندوق بيانات الطالب أعلى تقرير كل متدرب (js/report.js) -->
+            <div class="field full" data-field="college">
+              <label>الكلية / الجامعة <span class="req">*</span></label>
+              <input type="text" id="college" placeholder="مثال: جامعة السلطان قابوس" autocomplete="off">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <!-- حقل الجنس: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا الطالب -->
+            <div class="field" data-field="gender">
+              <label>الجنس <span class="req">*</span></label>
+              <select id="gender">
+                <option value="">اختر</option>
+                <option value="ذكر">ذكر</option>
+                <option value="انثى">انثى</option>
+              </select>
+              <div class="error-msg">يرجى اختيار الجنس</div>
+            </div>
+
+            <!-- حقل الجنسية: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا الطالب.
+                 قائمة منسدلة بخيار ثابت (Omani) بالإضافة لخيار "أخرى" يُظهر
+                 حقل نص حر لكتابة جنسية مخصّصة عند اختياره. -->
+            <div class="field" data-field="nationality">
+              <label>الجنسية <span class="req">*</span></label>
+              <select id="nationality">
+                <option value="">اختر</option>
+                <option value="Omani">Omani</option>
+                <option value="أخرى">أخرى</option>
+              </select>
+              <input type="text" id="nationality_other" placeholder="اكتب الجنسية" autocomplete="off" style="display:none; margin-top:8px;">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <!-- حقل السنة الدراسية: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا
+                 الطالب، وهو المصدر الوحيد للسنة الدراسية في كامل النظام —
+                 نافذة التقييم (📋 تقييم في لوحة الإدارة) تقرأ هذه القيمة
+                 مباشرة بدل إدخالها بشكل مستقل، فتبقى متزامنة دائماً معها. -->
+            <div class="field" data-field="year_of_study">
+              <label>السنة الدراسية <span class="req">*</span></label>
+              <input type="text" id="year_of_study" placeholder="مثال: السنة الثالثة" autocomplete="off">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <!-- حقل مكان التدريب: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا الطالب.
+                 قائمة منسدلة بخيارين ثابتين (طب / الإدارة) بالإضافة لخيار
+                 "أخرى" يُظهر حقل نص حر لكتابة مكان مخصّص عند اختياره. -->
+            <div class="field" data-field="place_of_training">
+              <label>مكان التدريب <span class="req">*</span></label>
+              <select id="place_of_training">
+                <option value="">اختر</option>
+                <option value="طب">طب</option>
+                <option value="الإدارة">الإدارة</option>
+                <option value="أخرى">أخرى</option>
+              </select>
+              <input type="text" id="place_of_training_other" placeholder="اكتب مكان التدريب" autocomplete="off" style="display:none; margin-top:8px;">
+              <div class="error-msg">هذا الحقل مطلوب</div>
+            </div>
+
+            <!-- حقل نوع التدريب: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا الطالب -->
+            <div class="field" data-field="training_type">
+              <label>نوع التدريب <span class="req">*</span></label>
+              <select id="training_type">
+                <option value="">اختر</option>
+                <option value="تدريب إلزامي">تدريب إلزامي</option>
+                <option value="تدريب تطوعي">تدريب تطوعي</option>
+              </select>
+              <div class="error-msg">يرجى اختيار نوع التدريب</div>
+            </div>
+
+            <!-- حقل المرحلة الدراسية: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا
+                 الطالب — يُميّز هل المتدرب طالب حالياً أم خريج بالفعل. -->
+            <div class="field" data-field="academic_stage">
+              <label>المرحلة الدراسية <span class="req">*</span></label>
+              <select id="academic_stage">
+                <option value="">اختر</option>
+                <option value="طالب">طالب</option>
+                <option value="خريج">خريج</option>
+              </select>
+              <div class="error-msg">يرجى اختيار المرحلة الدراسية</div>
+            </div>
+
+            <!-- ==========================================================
+                 منتقي «الفئة → الأقسام»: كل المحتوى الديناميكي بداخل
+                 categoryGrid / deptChecklist / selectedSummary تُبنى بالكامل
+                 من JavaScript (initDeptPicker في app.js) وليس هنا في HTML —
+                 هذه العناصر تبدأ فارغة عمداً.
+                 ========================================================== -->
+            <div class="field full" data-field="department">
+              <label>القسم <span class="req">*</span></label>
+
+              <div class="dept-picker">
+                <!-- الخطوة ١: بطاقات الفئات الأربع الثابتة (تُرسم من CATEGORIES في departments.js) -->
+                <div class="dept-step-label">
+                  <span class="step-num">١</span> اختيار الفئة
+                </div>
+                <div class="category-grid" id="categoryGrid"></div>
+
+                <!-- الخطوة ٢: أقسام الفئة النشطة فقط (تتغيّر كل مرة تُختار فيها فئة مختلفة) -->
+                <div class="dept-step-label dept-step-2">
+                  <span class="step-num">٢</span> اختيار الأقسام
+                </div>
+                <div class="category-list-hint" id="categoryHint">اختر فئة أعلاه لعرض أقسامها</div>
+                <div class="dept-checklist" id="deptChecklist"></div>
+
+                <!-- ملخص كل الأقسام المختارة حتى الآن (عبر كل الفئات معاً)،
+                     مع شرائح قابلة للحذف المباشر لكل قسم -->
+                <div class="selected-summary" id="selectedSummary">
+                  <div class="selected-count" id="selectedCount">لم يتم اختيار أي قسم بعد</div>
+                  <div class="selected-chips" id="selectedChips"></div>
+                </div>
+              </div>
+
+              <div class="error-msg">يرجى اختيار قسم واحد على الأقل</div>
+            </div>
+
+            <!-- ==========================================================
+                 فترة تدريب مستقلة لكل قسم مختار: صف واحد لكل قسم يظهر تلقائياً
+                 (renderPeriods في app.js) بمجرد اختياره من الأعلى، ويختفي
+                 عند إلغاء اختياره. لا توجد حقول تاريخ ثابتة هنا في HTML.
+                 ========================================================== -->
+            <div class="field full" data-field="periods">
+              <div class="period-section">
+                <h3>الفترة التدريبية لكل قسم</h3>
+
+                <!-- اختيار عام واحد لكل الطالب (وليس لكل قسم): إما تحديد فترة
+                     تدريب لكل قسم مختار الآن، أو إضافة الطالب بكل أقسامه
+                     المختارة معاً إلى قائمة الانتظار لتحديد الفترة لاحقاً.
+                     منطق التبديل والعرض في bindTrainingModeToggle() وrenderPeriods() (js/app.js) -->
+                <div class="training-mode-toggle" id="trainingModeToggle">
+                  <button type="button" class="mode-btn active" data-mode="dated">📅 تحديد الفترة التدريبية لكل قسم</button>
+                  <button type="button" class="mode-btn" data-mode="waitlist">⏳ إضافة الطالب إلى قائمة الانتظار</button>
+                </div>
+
+                <p class="period-hint" id="periodsHint">اختر الأقسام أولاً من الأعلى لتحديد فترة التدريب الخاصة بكل قسم.</p>
+                <div class="periods-list" id="periodsList"></div>
+
+                <div class="waitlist-mode-notice" id="waitlistModeNotice" style="display:none">
+                  ⏳ سيُضاف هذا الطالب إلى قائمة الانتظار، دون تحديد فترة تدريب الآن.
+                  يمكن لاحقاً من صفحة «قائمة الانتظار» تحديد فترة كل قسم من أقسامه دفعة واحدة، وعندها ينتقل الطالب تلقائياً إلى لوحة الإدارة.
+
+                  <div class="field waitlist-note-field" data-field="waitlist_note">
+                    <label for="waitlistNote">الملاحظة <span class="req">*</span></label>
+                    <textarea id="waitlistNote" rows="3" maxlength="300" placeholder="اكتب ملاحظة بخصوص هذا الطالب في قائمة الانتظار..."></textarea>
+                    <div class="error-msg">هذا الحقل مطلوب</div>
+                  </div>
+                </div>
+              </div>
+              <div class="error-msg">يرجى تحديد فترة تدريب صحيحة لكل قسم مختار</div>
+            </div>
+
+          </div>
+
+          <!-- زر الحفظ: يُعطَّل ويُظهر دوّارة تحميل أثناء انتظار رد Supabase
+               (setButtonLoading في js/ui.js)، لمنع النقر المتكرر أثناء الحفظ -->
+          <button type="submit" class="btn-submit" id="submitBtn">
+            <span class="spinner"></span>
+            <span class="btn-label">تسجيل</span>
+          </button>
+        </form>
+      </section>
+    </div>
+  </main>
+    </div>
+</div>
+
+  <!-- ==========================================================================
+       ترتيب تحميل السكربتات مهم جداً: كل ملف يعتمد على ما قبله مباشرة.
+       راجع التعليق التوضيحي أعلى كل ملف js/ لمزيد من تفاصيل الاعتماديات.
+       ========================================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/departments.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/waiting-alert.js"></script>
+<script src="js/training-sidebar.js"></script>
+</body>
+</html>

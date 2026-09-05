@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Institution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin-pages.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<script src="../js/theme-rotator.js"></script>
+<script src="../js/notify.js"></script>
+</head>
+<body>
+
+<header class="admin-page-header">
+    <div class="admin-header-shape admin-header-shape-1"></div>
+    <div class="admin-header-shape admin-header-shape-2"></div>
+    <div class="admin-header-shape admin-header-shape-3"></div>
+    <div class="admin-header-shape admin-header-shape-4"></div>
+    <div class="admin-page-header-left">
+        <a class="admin-page-back" href="../hub.html">← Hub</a>
+        <h1>Admin</h1>
+        <nav class="admin-page-tabs">
+            <a class="admin-page-tab" href="users.html">Users</a>
+            <a class="admin-page-tab" href="logins.html">Login History</a>
+            <a class="admin-page-tab" href="institutions.html">Ibra Department</a>
+            <a class="admin-page-tab" href="halls.html">Halls</a>
+            <a class="admin-page-tab active" href="add-institution.html">Add Institution</a>
+            <a class="admin-page-tab" href="deletion-log.html">Deletion Log</a>
+        </nav>
+    </div>
+    <a class="admin-logout-link" href="#" onclick="logoutHubAdmin(); return false;">Logout</a>
+</header>
+
+<div class="admin-page-body">
+    <div class="admin-card">
+        <h2>Add Institution</h2>
+        <p style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
+            Ibra institutions are saved as "Ibra - [name]" and only appear on the Ibra Department page.
+            Other institutions are saved exactly as typed, with no prefix.
+        </p>
+
+        <div class="admin-form-row" style="grid-template-columns: 1fr 2fr auto;">
+            <div>
+                <label>Category</label>
+                <div class="admin-pill-toggle" id="newInstCategoryToggle">
+                    <button type="button" class="admin-pill-btn active" data-value="ibra">Ibra</button>
+                    <button type="button" class="admin-pill-btn" data-value="other">Other</button>
+                </div>
+                <input type="hidden" id="newInstCategory" value="ibra">
+            </div>
+            <div>
+                <label id="newInstNameLabel">Name (saved as "Ibra - ...")</label>
+                <input type="text" id="newInstName" list="ibraDeptSuggestions" placeholder="e.g. Radiology Department">
+                <datalist id="ibraDeptSuggestions"></datalist>
+            </div>
+            <button class="admin-btn" id="addInstBtn">+ Add</button>
+        </div>
+        <p class="admin-note" id="addInstNote"></p>
+    </div>
+
+    <div class="admin-card">
+        <h2>All Institutions</h2>
+        <table class="admin-table">
+            <thead><tr><th>Category</th><th>Name</th></tr></thead>
+            <tbody id="instTableBody">
+                <tr class="admin-empty-row"><td colspan="2">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="module" src="../js/admin-add-institution.js"></script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  dashboard.html — لوحة إدارة المتدربين
+  ============================================================================
+  الغرض: عرض وإدارة كل بيانات المتدربين المسجَّلين — بطاقات أقسام (تُظهر عدد
+  من هو «قيد التدريب حالياً» في كل قسم فقط)، شريط تصفية حسب الفئة الرئيسية،
+  لوحة طباعة تقرير PDF لفترة زمنية محددة (مستقلة تماماً عن فلاتر البحث)،
+  لوحة بحث وفلترة تسعة معايير، وجدول قابل للفرز/التوسيع/الترقيم مع أزرار
+  تعديل وحذف وتقرير مستقل لكل قسم من كل طالب.
+
+  كل البيانات تُجلب مرة واحدة عند التحميل (loadStudents في dashboard.js)
+  وتُخزَّن في المتصفح؛ أي فلترة أو فرز أو تعديل أو حذف لاحق يعمل محلياً
+  دون إعادة الاتصال بالخادم في كل مرة.
+
+  التبعيات (بترتيب التحميل الإلزامي في أسفل الصفحة):
+    1) عميل Supabase JS من CDN
+    2) js/config.js       — بيانات الاتصال بمشروع Supabase
+    3) js/departments.js  — الفئات والأقسام + دوال التجميع
+    4) js/ui.js           — عناصر واجهة مشتركة (Toast، نوافذ التأكيد/التعديل...)
+    5) js/supabase.js     — الاتصال الفعلي بقاعدة البيانات (جلب/تعديل/حذف)
+    6) js/report.js       — بناء تقارير PDF (فردي وعام) قبل استخدامها هنا
+    7) js/dashboard.js    — منطق هذه الصفحة تحديداً (يُشغَّل عند DOMContentLoaded)
+
+  راجع أيضاً: register.html (صفحة التسجيل)، css/dashboard.css (أنماط خاصة بهذه
+  الصفحة فقط: البطاقات، الجدول، الفلاتر)، css/style.css (الأنماط المشتركة).
+  ============================================================================
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة إدارة المتدربين | قسم التطوير والتوجيه المهني</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+
+<!-- ==========================================================================
+     حارس الدخول: يُنفَّذ فوراً كأول شيء في الصفحة (قبل أي CSS أو سكربت خارجي
+     آخر) لمنع أي وميض لمحتوى محمي قبل التحقق. يفحص الجلسة المحلية المحفوظة
+     في localStorage بعد تسجيل الدخول (راجع js/auth.js لمنطق الحفظ الكامل)،
+     ويُعيد التوجيه فوراً لصفحة index.html (صفحة تسجيل الدخول) إن كانت غير
+     موجودة أو منتهية الصلاحية. مكرَّر بنفس الشكل تحديداً في أعلى
+     register.html وwaiting.html وreports.html.
+     ========================================================================== -->
+<script>
+(function(){
+  var AUTH_KEY = "ibra_admin_session";
+  var MAX_HOURS = 12;
+  try {
+    var raw = localStorage.getItem(AUTH_KEY);
+    var session = raw ? JSON.parse(raw) : null;
+    var valid = !!(session && session.username && session.loginAt &&
+      ((Date.now() - session.loginAt) / 3600000 <= MAX_HOURS));
+    if (!valid){
+      localStorage.removeItem(AUTH_KEY);
+      location.replace("../index.html");
+    }
+  } catch (e){
+    location.replace("../index.html");
+  }
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/training-sidebar.css">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/auth.css">
+<link rel="stylesheet" href="css/waiting-alert.css">
+<script src="js/theme-rotator.js"></script>
+</head>
+<body>
+
+  <!-- الشريط العلوي: نفس بنية register.html تماماً، فقط الرابط النشط هنا مختلف -->
+  <div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="فتح/إغلاق القائمة">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+            <div class="admin-sidebar-brand">
+                <div class="admin-brand-icon"><img src="../assets/logo.png" alt="شعار المستشفى" onerror="handleLogoImgError(this)"></div>
+                <p class="sidebar-username" id="sidebarUsername"></p>
+            </div>
+            <nav class="admin-sidebar-nav">
+                <a class="admin-nav-link" href="home.html">الرئيسية</a>
+                <a class="admin-nav-link" href="register.html">تسجيل متدرب</a>
+                <a class="admin-nav-link" href="waiting.html">قائمة الانتظار</a>
+                <a class="admin-nav-link active" href="dashboard.html">لوحة الإدارة</a>
+                <a class="admin-nav-link" href="reports.html">تقارير</a>
+            </nav>
+            <a class="admin-nav-logout logout-link" href="#" id="logoutLink">تسجيل الخروج</a>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+  <main class="dash-wrap">
+
+    <div class="dash-head">
+      <div>
+        <h2>لوحة إدارة المتدربين</h2>
+        <p>نظرة عامة على الأقسام والمتدربين المسجلين حالياً</p>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         بطاقات الأقسام: تُبنى ديناميكياً في renderDepartmentCards() (dashboard.js).
+         تُظهر فقط الأقسام التي بها متدرب واحد «قيد التدريب حالياً» على الأقل
+         (وليس إجمالي كل من سجّل تاريخياً)، ويمكن تضييقها بشريط شرائح الفئة
+         أسفل عنوان القسم مباشرة. بطاقات "skeleton-card" الرمادية أدناه هي
+         حالة التحميل المؤقتة قبل وصول البيانات الفعلية من Supabase.
+         ========================================================================== -->
+    <div class="section-toolbar">
+      <h3>الأقسام المسجَّلة</h3>
+    </div>
+    <div class="category-chip-row" id="categoryChipRow"></div>
+    <div class="dept-grid" id="deptGrid">
+      <!-- تُملأ ديناميكياً بواسطة departments.js / dashboard.js -->
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+
+    <!-- ==========================================================================
+         لوحة البحث والتصفية: تسعة معايير تُطبَّق معاً (AND منطقي) عبر
+         getFilteredStudents() في dashboard.js. حقول النص تبحث بحثاً جزئياً
+         فورياً (مع تأخير debounce)، بينما القوائم المنسدلة والتواريخ تطابق
+         مطابقة دقيقة. "الفئة الرئيسية" و"القسم" مرتبطان معاً: اختيار فئة
+         يُحدّث خيارات القسم لتقتصر على أقسام تلك الفئة فقط.
+         ========================================================================== -->
+    <div class="filters-panel">
+      <h3>البحث والتصفية</h3>
+      <div class="filters-grid">
+        <div class="f-field">
+          <label>اسم الطالب</label>
+          <input type="text" id="f_name" placeholder="ابحث بالاسم">
+        </div>
+        <div class="f-field">
+          <label>رقم الهاتف</label>
+          <input type="text" id="f_phone" placeholder="ابحث برقم الهاتف">
+        </div>
+        <div class="f-field">
+          <label>التخصص</label>
+          <input type="text" id="f_spec" placeholder="ابحث بالتخصص">
+        </div>
+        <div class="f-field">
+          <label>الفئة الرئيسية</label>
+          <select id="f_category"><option value="">جميع الفئات</option></select>
+        </div>
+        <div class="f-field">
+          <label>القسم</label>
+          <select id="f_department"><option value="">جميع الأقسام</option></select>
+        </div>
+        <div class="f-field">
+          <label>تاريخ بداية التدريب</label>
+          <input type="date" id="f_start">
+        </div>
+        <div class="f-field">
+          <label>تاريخ نهاية التدريب</label>
+          <input type="date" id="f_end">
+        </div>
+        <div class="f-field">
+          <label>تاريخ التسجيل</label>
+          <input type="date" id="f_regdate">
+        </div>
+        <div class="f-field">
+          <label>حالة التدريب</label>
+          <select id="f_status">
+            <option value="">جميع الحالات</option>
+            <option value="active">الطلاب الحاليين (قيد التدريب)</option>
+            <option value="upcoming">التدريبات القادمة</option>
+            <option value="ended">التدريبات المنتهية</option>
+          </select>
+        </div>
+      </div>
+      <div class="filters-actions">
+        <button class="btn-reset" id="resetFiltersBtn">إعادة تعيين</button>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         جدول المتدربين: كل محتوى tbody يُبنى بالكامل من renderTable() في
+         dashboard.js في كل مرة تتغيّر فيها الفلاتر/الفرز/الصفحة. تلميح
+         التمرير الأفقي (tableScrollHint) يظهر تلقائياً فقط على الشاشات
+         الضيقة عبر CSS. رؤوس الأعمدة التي تحمل data-sort قابلة للضغط للفرز؛
+         عمود "الإجراءات" الأخير يحوي أزرار تعديل/حذف/تقرير حسب نوع الصف
+         (طالب بقسم واحد، أو صف ملخّص/فرعي لطالب متعدد الأقسام).
+         ========================================================================== -->
+    <div class="table-panel">
+      <div class="table-scroll-hint" id="tableScrollHint">↔ مرر أفقياً لعرض كل أعمدة الجدول</div>
+      <div class="table-scroll">
+        <table class="students-table" id="studentsTable">
+          <thead>
+            <tr>
+              <th data-sort="student_name">اسم الطالب <span class="sort-arrow">↕</span></th>
+              <th data-sort="college">الكلية / التخصص <span class="sort-arrow">↕</span></th>
+              <th data-sort="department">القسم <span class="sort-arrow">↕</span></th>
+              <th class="th-date" data-sort="registration_date">تاريخ التسجيل <span class="sort-arrow">↕</span></th>
+              <th class="th-date" data-sort="training_start">بداية التدريب <span class="sort-arrow">↕</span></th>
+              <th class="th-date" data-sort="training_end">نهاية التدريب <span class="sort-arrow">↕</span></th>
+              <th>مدة التدريب</th>
+              <th>الحالة</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- تُملأ ديناميكياً بواسطة renderTable() في js/dashboard.js -->
+          </tbody>
+        </table>
+      </div>
+      <!-- أزرار الصفحات + نص "عرض X - Y من أصل Z"، تُبنى في renderPagination() -->
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+  </main>
+    </div>
+</div>
+
+  <!-- ==========================================================================
+       ترتيب تحميل السكربتات مهم جداً: كل ملف يعتمد على ما قبله مباشرة.
+       راجع التعليق التوضيحي أعلى كل ملف js/ لمزيد من تفاصيل الاعتماديات.
+       ========================================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/departments.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/report.js"></script>
+  <script src="js/evaluation.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/waiting-alert.js"></script>
+<script src="js/training-sidebar.js"></script>
+</body>
+</html>

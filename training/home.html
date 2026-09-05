@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الرئيسية | نظام تسجيل وإدارة المتدربين</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+
+<script>
+(function(){
+  var AUTH_KEY = "ibra_admin_session";
+  var MAX_HOURS = 12;
+  try {
+    var raw = localStorage.getItem(AUTH_KEY);
+    var session = raw ? JSON.parse(raw) : null;
+    var valid = !!(session && session.username && session.loginAt &&
+      ((Date.now() - session.loginAt) / 3600000 <= MAX_HOURS));
+    if (!valid){
+      localStorage.removeItem(AUTH_KEY);
+      location.replace("../index.html");
+    }
+  } catch (e){
+    location.replace("../index.html");
+  }
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/training-sidebar.css">
+<link rel="stylesheet" href="css/home.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="فتح/إغلاق القائمة">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+            <div class="admin-sidebar-brand">
+                <div class="admin-brand-icon"><img src="../assets/logo.png" alt="شعار المستشفى"></div>
+                <p class="sidebar-username" id="sidebarUsername"></p>
+            </div>
+            <nav class="admin-sidebar-nav">
+                <a class="admin-nav-link active" href="home.html">الرئيسية</a>
+                <a class="admin-nav-link" href="register.html">تسجيل متدرب</a>
+                <a class="admin-nav-link" href="waiting.html">قائمة الانتظار</a>
+                <a class="admin-nav-link" href="dashboard.html">لوحة الإدارة</a>
+                <a class="admin-nav-link" href="reports.html">تقارير</a>
+            </nav>
+            <a class="admin-nav-logout logout-link" href="#" id="logoutLink">تسجيل الخروج</a>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <main class="chart-page-heading-wrap">
+        <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <div class="chart-page-heading">
+            <div>
+                <h1>نظرة عامة</h1>
+                <p>ملخص حي لبيانات المتدربين — من نفس قاعدة البيانات المستخدمة في باقي النظام.</p>
+            </div>
+            <button type="button" class="dashboard-print-btn no-print" onclick="window.print()">🖨 طباعة</button>
+        </div>
+
+        <div class="dashboard-stats chart-kpi-grid" id="homeKpiGrid">
+            <div class="stat-tile chart-tile-loading" style="--tile-color:#DDD6FE;"><div class="stat-tile-number">…</div><div class="stat-tile-label">إجمالي المتدربين</div></div>
+            <div class="stat-tile chart-tile-loading" style="--tile-color:#DDD6FE;"><div class="stat-tile-number">…</div><div class="stat-tile-label">قيد التدريب حالياً</div></div>
+            <div class="stat-tile chart-tile-loading" style="--tile-color:#DDD6FE;"><div class="stat-tile-number">…</div><div class="stat-tile-label">قائمة الانتظار</div></div>
+            <div class="stat-tile chart-tile-loading" style="--tile-color:#DDD6FE;"><div class="stat-tile-number">…</div><div class="stat-tile-label">الأقسام المشارِكة</div></div>
+            <div class="stat-tile chart-tile-loading" style="--tile-color:#DDD6FE;"><div class="stat-tile-number">…</div><div class="stat-tile-label">التقييمات المكتملة</div></div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <div class="chart-card-header"><h3>التسجيلات الشهرية</h3><span class="chart-card-subtitle">آخر 12 شهراً</span></div>
+                <div class="chart-canvas-wrap"><canvas id="chartMonthly"></canvas></div>
+                <div class="chart-state-overlay" id="chartMonthlyState"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-card-header"><h3>المتدربون حسب القسم</h3><span class="chart-card-subtitle">أعلى 8 أقسام</span></div>
+                <div class="chart-canvas-wrap"><canvas id="chartDepartments"></canvas></div>
+                <div class="chart-state-overlay" id="chartDepartmentsState"></div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <div class="chart-card-header"><h3>نوع التدريب والجنس</h3></div>
+                <div class="chart-split-two">
+                    <div class="chart-split-half">
+                        <div class="chart-canvas-wrap"><canvas id="chartTrainingType"></canvas></div>
+                        <div class="chart-state-overlay" id="chartTrainingTypeState"></div>
+                    </div>
+                    <div class="chart-split-half">
+                        <div class="chart-canvas-wrap"><canvas id="chartGender"></canvas></div>
+                        <div class="chart-state-overlay" id="chartGenderState"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-card-header"><h3>المتدربون حسب الفئة</h3></div>
+                <div class="chart-canvas-wrap"><canvas id="chartCategory"></canvas></div>
+                <div class="chart-state-overlay" id="chartCategoryState"></div>
+            </div>
+        </div>
+
+    </main>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabase.js"></script>
+<script src="js/departments.js"></script>
+<script src="js/home.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/training-sidebar.js"></script>
+</body>
+</html>

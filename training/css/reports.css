@@ -1,0 +1,72 @@
+/* ==========================================================================
+   reports.css
+   أنماط خاصة بصفحة التقارير (reports.html) فقط — يُحمَّل بعد css/style.css
+   وcss/dashboard.css (يُعاد استخدام .dash-wrap و.period-report-panel و
+   .btn-export و.f-field من dashboard.css مباشرة). يغطي فقط شبكة بطاقات
+   التقارير الأربعة وقواعد الاستجابة الخاصة بها.
+   ========================================================================== */
+
+.reports-wrap{ padding-bottom: 70px; }
+
+.reports-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  margin-top: 8px;
+}
+@media (max-width:640px){ .reports-grid{ grid-template-columns: 1fr;} }
+
+.report-card{
+  background:#fff;
+  border-radius: var(--radius-md);
+  border:1px solid var(--border);
+  padding: 24px 22px;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  text-align:center;
+  align-items:center;
+}
+.report-card:hover{
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+.report-card-icon{
+  width:56px;height:56px;
+  border-radius: 16px;
+  background: var(--primary-light);
+  color: var(--primary);
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;
+  margin-bottom:4px;
+}
+
+.report-card h3{
+  margin:0;
+  font-size:15px;
+  font-weight:800;
+  color: var(--text);
+  line-height:1.6;
+}
+
+.report-card p{
+  margin:0 0 8px;
+  font-size:12.5px;
+  color: var(--text-muted);
+  line-height:1.7;
+  min-height: 58px;
+}
+
+.report-card .btn-export{
+  width:100%;
+  justify-content:center;
+}
+
+@media (max-width:520px){
+  .report-card{ padding:20px 16px; }
+  .report-card p{ min-height:0; }
+}
