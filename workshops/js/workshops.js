@@ -908,6 +908,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 return;
             }
 
+            // Not part of the main required-fields check above since it only
+            // applies when this section is actually shown (no-attendance
+            // courses) — hidden entirely for attendance-required ones, where
+            // it isn't relevant at all.
+            const firstLogVisible = !document.getElementById('firstLogEntryContainer').classList.contains('hidden-element');
+            if (firstLogVisible) {
+                const firstLogTitleVal = document.getElementById('firstLogTitle').value.trim();
+                const firstLogDateVal = document.getElementById('firstLogDate').value;
+                const firstLogTimeVal = document.getElementById('firstLogTime').value;
+                if (!firstLogTitleVal || !firstLogDateVal || !firstLogTimeVal) {
+                    alert("Please fill in the title, date, and time for your first session.");
+                    return;
+                }
+            }
+
             for (const field of TARGETING_FIELDS) {
                 const wrapper = document.getElementById('regFieldWrapper_' + field.key);
                 const isHidden = wrapper && wrapper.classList.contains('hidden-element');
