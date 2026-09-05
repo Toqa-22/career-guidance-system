@@ -1,6 +1,13 @@
 /* Additive-only responsive tweaks — desktop layout is untouched */
 .nav-buttons { flex-wrap: wrap; row-gap: 12px; }
 
+/* Safety net: whatever content occasionally runs wider than expected on a
+   narrow screen (a long select option, a rigid-width field) shows a
+   horizontal scrollbar on that element instead of ever pushing the WHOLE
+   page sideways. */
+html, body { overflow-x: hidden; }
+
+
 @media (max-width: 640px) {
     body { padding: 20px 12px; }
     /* Full-bleed pages (login split-screen, register.html hero) must stay
