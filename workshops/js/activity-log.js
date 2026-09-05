@@ -18,7 +18,7 @@ if (!courseId) {
     document.getElementById('checkBtn').disabled = true;
     document.body.classList.remove('theme-loading');
 } else {
-    client.from('courses').select('name, theme_color').eq('id', courseId).maybeSingle().then(({ data, error }) => {
+    client.from('courses').select('name, theme_color, description, course_date, instructor_name, seats, unlimited_seats').eq('id', courseId).maybeSingle().then(({ data, error }) => {
         if (error || !data) {
             document.getElementById('courseNameLine').textContent = 'This activity could not be found.';
             document.getElementById('checkBtn').disabled = true;
@@ -31,6 +31,15 @@ if (!courseId) {
         if (data.theme_color) document.documentElement.style.setProperty('--course-theme', data.theme_color);
         document.body.classList.remove('theme-loading');
         document.getElementById('courseNameLine').textContent = `${data.name} — enter your staff number to check in.`;
+
+        // Same course-info card style as the registration page, so this
+        // still feels like the same activity rather than a generic form.
+        document.getElementById('featuredSection').classList.remove('hidden-element');
+        document.getElementById('featuredTitle').textContent = data.name;
+        document.getElementById('featuredDescription').textContent = (data.description || '').trim() || 'Log your sessions for this activity below.';
+        const metaParts = [`<span>📅 ${data.course_date || 'Date TBA'}</span>`];
+        if ((data.instructor_name || '').trim()) metaParts.push(`<span>🎓 ${data.instructor_name}</span>`);
+        document.getElementById('featuredMeta').innerHTML = metaParts.join('');
     });
 }
 
