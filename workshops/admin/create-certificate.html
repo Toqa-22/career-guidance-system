@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Certificate</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/certificate-editor.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link active" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <div class="grid-panel">
+            <div class="card-box">
+
+                <div class="array-group-box">
+                    <div class="section-title"><span class="section-number">1</span> Course &amp; Certificate Name</div>
+                    <select id="certCourseSelect" required>
+                        <option value="">-- Select Course --</option>
+                    </select>
+                    <p class="section-hint" style="margin-top:8px; margin-bottom:0;">One certificate template per course. Selecting a course that already has a template loads it for editing.</p>
+
+                    <label style="font-size:12px; color:#475569; display:block; margin-top:16px; margin-bottom:6px;">Certificate Name</label>
+                    <input type="text" id="certificateNameInput" placeholder="e.g. Certificate for BLS">
+                </div>
+
+                <div class="array-group-box">
+                    <div class="section-title"><span class="section-number">2</span> Certificate Image</div>
+                    <label style="font-size:13px; color:#475569; display:block; margin-bottom:6px;">Upload Certificate Image (PNG/JPG)</label>
+                    <input type="file" id="previewImageInput" accept="image/png,image/jpeg">
+                    <div id="templateFilesStatus" style="font-size:12.5px; color:#64748b; margin-top:8px;"></div>
+                </div>
+
+                <div class="array-group-box">
+                    <div class="section-title"><span class="section-number">3</span> Certificate Layout Editor</div>
+                    <p class="section-hint">Click "+ Add Rectangle", then drag it into place and drag its corner handle to resize. Click a rectangle to edit its settings below.</p>
+                    <button type="button" class="btn-action btn-add" id="addRectangleBtn" style="margin-bottom:14px;">+ Add Rectangle</button>
+
+                    <div id="certEditorStage" class="cert-editor-stage">
+                        <div id="certEditorEmptyState" class="cert-editor-empty">Upload a certificate image above to start placing rectangles.</div>
+                        <img id="certPreviewImg" class="hidden-element" alt="Certificate preview">
+                    </div>
+                </div>
+
+                <div class="array-group-box hidden-element" id="rectangleConfigPanel">
+                    <div class="section-title" style="margin-bottom:14px;">Selected Rectangle Settings</div>
+
+                    <div class="rect-data-field-highlight">
+                        <label style="font-size:12px; color:#334155; font-weight:bold; display:block; margin-bottom:6px;">Select Data</label>
+                        <select id="rectDataField"></select>
+                        <input type="text" id="rectCustomText" class="hidden-element" placeholder="Custom text to display" style="margin-top:10px;">
+                    </div>
+
+                    <div class="input-row">
+                        <div><label style="font-size:12px; color:#475569;">X position</label><input type="number" id="rectX"></div>
+                        <div><label style="font-size:12px; color:#475569;">Y position</label><input type="number" id="rectY"></div>
+                    </div>
+                    <div class="input-row">
+                        <div><label style="font-size:12px; color:#475569;">Width</label><input type="number" id="rectWidth" min="10"></div>
+                        <div><label style="font-size:12px; color:#475569;">Height</label><input type="number" id="rectHeight" min="10"></div>
+                    </div>
+
+                    <div class="input-row">
+                        <div>
+                            <label style="font-size:12px; color:#475569;">Font</label>
+                            <select id="rectFont">
+                                <option>Arial</option>
+                                <option>Georgia</option>
+                                <option>Times New Roman</option>
+                                <option>Verdana</option>
+                                <option>Courier New</option>
+                            </select>
+                        </div>
+                        <div><label style="font-size:12px; color:#475569;">Font Size</label><input type="number" id="rectFontSize" min="6" value="24"></div>
+                    </div>
+                    <div class="input-row">
+                        <div><label style="font-size:12px; color:#475569;">Text Color</label><input type="color" id="rectColor" value="#000000" style="padding:4px; height:44px;"></div>
+                        <div><label style="font-size:12px; color:#475569;">Horizontal Align</label>
+                            <select id="rectHAlign">
+                                <option value="left">Left</option>
+                                <option value="center" selected>Center</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div><label style="font-size:12px; color:#475569;">Vertical Align</label>
+                            <select id="rectVAlign">
+                                <option value="top">Top</option>
+                                <option value="middle" selected>Middle</option>
+                                <option value="bottom">Bottom</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:18px; align-items:center; padding-top:22px;">
+                            <label class="designation-item"><input type="checkbox" id="rectBold"> Bold</label>
+                            <label class="designation-item"><input type="checkbox" id="rectItalic"> Italic</label>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-flex btn-secondary" id="deleteRectangleBtn" style="width:100%;">Delete This Rectangle</button>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-flex btn-primary-action" id="saveCertificateBtn">Save Certificate</button>
+                    <a class="btn-flex btn-secondary" href="certificates.html" style="text-decoration:none; text-align:center; display:flex; align-items:center; justify-content:center;">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/create-certificate.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

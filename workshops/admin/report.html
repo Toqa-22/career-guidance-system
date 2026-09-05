@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/report.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<!-- Plain <script> tags, NOT type="module" — xlsx-js-style must be loaded this
+     way to expose the global XLSX object; excel-export.js depends on it -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../js/excel-export.js"></script>
+<!-- Plain <script> tags too — the Custom Field Report builds its PDF client-side -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link active" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <div class="report-tools">
+            <div class="report-tool-card">
+                <h3>Report by Staff Number &amp; Date Range</h3>
+                <p>Export registration records for one staff number, optionally narrowed to a date range.</p>
+                <div class="report-tool-row">
+                    <input type="text" id="reportStaffNumber" placeholder="Staff Number">
+                    <input type="date" id="reportStaffFrom" title="From date">
+                    <input type="date" id="reportStaffTo" title="To date">
+                    <button type="button" class="btn-action btn-add" onclick="exportStaffReport()">Export Excel</button>
+                </div>
+            </div>
+
+            <div class="report-tool-card">
+                <h3>Full Report by Date Range</h3>
+                <p>Export every registration record within a date range, optionally for one course.</p>
+                <div class="report-tool-row">
+                    <select id="reportRangeCourse" title="Course"><option value="">All Activity</option></select>
+                    <input type="date" id="reportRangeFrom" title="From date">
+                    <input type="date" id="reportRangeTo" title="To date">
+                    <button type="button" class="btn-action btn-add" onclick="exportDateRangeReport()">Export Excel</button>
+                    <button type="button" class="btn-action btn-add" onclick="exportDateRangeReportPdf()">Export PDF</button>
+                </div>
+            </div>
+
+            <div class="report-tool-card">
+                <h3>Custom Field Report (PDF)</h3>
+                <p>Pick a course and/or date range, then choose which fields to break participants down by. Each field becomes its own table of value → participant count, with a total.</p>
+                <div class="report-tool-row">
+                    <select id="reportFieldsCourse" title="Course"><option value="">All Activity</option></select>
+                    <input type="date" id="reportFieldsFrom" title="From date">
+                    <input type="date" id="reportFieldsTo" title="To date">
+                </div>
+                <div class="report-fields-grid">
+                    <label><input type="checkbox" class="report-field-checkbox" value="designation_snapshot"> Designations</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="job_level_snapshot"> Job Level</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="nationality_snapshot"> Nationality</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="education_qualification_snapshot"> Highest Educational Qualification</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="experience_years_snapshot"> Experience Years</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="organization_snapshot"> Organization</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="directorate_snapshot"> Directorate</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="program_type_snapshot"> Type of Program</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="attendance_nature_snapshot"> Nature of Attendance</label>
+                    <label><input type="checkbox" class="report-field-checkbox" value="institution_name_snapshot"> Institutional</label>
+                </div>
+                <div class="report-tool-row" style="margin-top: 14px;">
+                    <button type="button" class="btn-action btn-add" onclick="generateFieldsReportPdf()">Generate Report</button>
+                </div>
+                <p id="reportFieldsNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+            </div>
+
+            <div class="report-tool-card">
+                <h3>Hall Activity Report (PDF)</h3>
+                <p>Choose a hall and a reservation type, then a period — get a logo-headed PDF with the activity list and a count summary.</p>
+                <div class="report-tool-row">
+                    <select id="hallReportHallSelect" title="Hall">
+                        <option value="">All Halls</option>
+                        <option value="Ibn Al-Thhabi">Ibn Al-Thhabi</option>
+                        <option value="Library">Library</option>
+                    </select>
+                    <select id="hallReportTypeSelect" title="Type of Reservation">
+                        <option value="">All Types</option>
+                        <option value="Meeting">Meeting</option>
+                        <option value="Lecture">Lecture</option>
+                        <option value="Workshop">Workshop</option>
+                        <option value="CME">CME</option>
+                    </select>
+                    <input type="date" id="hallReportFrom" title="From date">
+                    <input type="date" id="hallReportTo" title="To date">
+                    <button type="button" class="btn-action btn-add" onclick="generateHallActivityReportPdf()">Generate Report</button>
+                </div>
+                <p id="hallReportNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+            </div>
+
+            <div class="report-tool-card">
+                <h3>Department Staffing Chart (PDF)</h3>
+                <p>A PDF with total staff vs. workshop attendees per department, a coverage percentage chart, and a full breakdown table.</p>
+                <div class="report-tool-row">
+                    <button type="button" class="btn-action btn-add" onclick="generateDepartmentChartPdf()">Generate Report</button>
+                </div>
+                <p id="deptChartNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+                <canvas id="deptChartOffscreen" width="900" height="500" style="display:none;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/report.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dept Hall Requests</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/hall-reservation.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link active" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+    <div class="hall-page-heading">
+        <h1>Dept Hall Requests</h1>
+        <p>Review booking requests from departments — approve to confirm them as real bookings, or decline with a reason.</p>
+    </div>
+
+    <div class="hall-card" style="margin-bottom: 22px;">
+        <h3>Share the Request Link</h3>
+        <p class="hall-field-hint" style="margin-top:0;">Give this link to departments so they can view the calendar and submit a request themselves.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <input type="text" id="requestLinkInput" readonly style="flex:1; min-width:220px; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; background:#f8fafc;">
+            <button type="button" class="hall-submit-btn" id="copyLinkBtn" style="width:auto; padding:10px 20px;">Copy Link</button>
+        </div>
+    </div>
+
+    <div class="hall-card">
+        <h3>Pending Requests</h3>
+        <div id="requestsList"><p class="hall-day-detail-placeholder">Loading…</p></div>
+    </div>
+
+</div>
+</div>
+</div>
+
+<script type="module" src="../js/department-hall-requests-admin.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

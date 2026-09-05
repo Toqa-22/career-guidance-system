@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirm Attendance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/workshops.css">
+<link rel="stylesheet" href="css/notifications.css">
+<script src="js/theme-rotator.js"></script>
+<script src="js/notify.js"></script>
+</head>
+<body>
+
+<div class="simple-page-container">
+
+    <div class="simple-header">
+        <div class="brand-icon" aria-hidden="true">
+            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+        </div>
+        <p class="simple-header-kicker">Ibra Hospital<br>Professional Development and Career Guidance</p>
+        <h1>Confirm Attendance</h1>
+        <p id="courseNameLine">Enter your staff number to confirm you're here.</p>
+    </div>
+
+    <div class="form-card" style="max-width: 420px; margin: 0 auto;">
+        <label style="font-size:14px; font-weight:bold; color:#334155; display:block; margin-bottom:8px;">Staff Number</label>
+        <input type="text" id="staffNumberInput" placeholder="e.g. 12345" style="margin-bottom:16px;">
+        <button class="btn-register" id="confirmBtn" style="width:100%;">Confirm Attendance</button>
+        <p id="attendanceNote" style="margin-top:16px; font-size:14px; text-align:center;"></p>
+    </div>
+
+</div>
+
+<script type="module" src="js/attendance.js"></script>
+</body>
+</html>

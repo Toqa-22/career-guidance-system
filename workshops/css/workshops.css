@@ -1,0 +1,375 @@
+:root {
+    --deep-purple: #3B0764;
+    --dark-purple: #5B21B6;
+    --primary-purple: #7C3AED;
+    --medium-purple: #8B5CF6;
+    --bright-purple: #A855F7;
+    --light-purple: #C084FC;
+    --lavender: #E9D5FF;
+    --pale-lavender: #F5F3FF;
+
+    --accent-yellow: #FFC107;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-pink: #FF4F81;
+
+    --text-dark: #111111;
+    --text-muted: #64748B;
+
+    --white: #FFFFFF;
+    --border: #E5E7EB;
+
+    /* Per-course theme, driven from the admin's chosen color (js/workshops.js
+       computes --course-theme-light/-dark from it). Defaults to the purple
+       brand color until a course sets its own. */
+    --course-theme: var(--primary-purple);
+    --course-theme-light: var(--medium-purple);
+    --course-theme-dark: var(--dark-purple);
+
+    /* Kept for backward compatibility with any leftover references —
+       now point at the purple system instead of the old orange one. */
+    --primary-orange: var(--primary-purple);
+    --primary-orange-dark: var(--dark-purple);
+    --light-orange: var(--pale-lavender);
+    --light-blue: #EFF6FF;
+    --light-green: #F0FDF4;
+    --accent-purple: var(--medium-purple);
+    --background: #FAF7FF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Manrope', Arial, sans-serif; }
+html { scroll-behavior: smooth; }
+body {
+    color: var(--text-dark);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--course-theme, #7C3AED) 20%, white) 0%, color-mix(in srgb, var(--course-theme, #7C3AED) 10%, white) 100%);
+    background-attachment: fixed;
+    transition: background 0.3s ease;
+}
+.container { max-width: 1180px; margin: auto; padding: 0 20px; }
+
+/* ===== Simple standalone pages (certificate claim, verify, student dashboard) ===== */
+.simple-page-container { max-width: 900px; margin: 0 auto; padding: 64px 20px; }
+.simple-header { text-align: center; margin-bottom: 32px; }
+.simple-header-kicker { font-size: 13px; font-weight: 700; color: var(--course-theme, #7C3AED); line-height: 1.5; margin-bottom: 8px; }
+.simple-header .brand-icon { margin: 0 auto 20px; }
+.simple-header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; }
+.simple-header p { color: var(--text-muted); font-size: 14.5px; font-weight: 500; }
+
+/* ===== Hero (register.html) ===== */
+.hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--course-theme-dark) 0%, var(--course-theme) 55%, var(--course-theme-light) 100%);
+    padding: 90px 20px 110px; text-align: center;
+    border-bottom: 1px solid var(--border);
+    transition: opacity 0.2s ease;
+}
+/* Hidden until js/workshops.js knows the real course color, so visitors
+   never see a flash of the default purple before it switches. Removed via
+   the "theme-loading" class coming off <body> once the color is applied. */
+body.theme-loading .hero { opacity: 0; }
+
+/* ===== Loading overlay (shown until the real course color is known) ===== */
+.page-loading-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    background: linear-gradient(135deg, #E0C7FF 0%, #C7E3FF 100%);
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.page-loading-spinner {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 4px solid rgba(124, 58, 237, 0.15);
+    border-top-color: var(--course-theme);
+    animation: pageLoadingSpin 0.8s linear infinite;
+}
+.page-loading-overlay p { font-weight: 700; font-size: 14px; color: var(--text-muted); letter-spacing: 0.02em; }
+@keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
+body:not(.theme-loading) .page-loading-overlay { opacity: 0; visibility: hidden; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+    .page-loading-spinner { animation-duration: 1.6s; }
+}
+.hero-shape { position: absolute; border-radius: 50%; opacity: 0.25; }
+.hero-shape-1 { width: 220px; height: 220px; background: #A855F7; top: -60px; right: 8%; animation: heroFloat1 9s ease-in-out infinite; }
+.hero-shape-2 { width: 90px; height: 90px; background: #C084FC; bottom: 20px; left: 6%; animation: heroFloat2 7s ease-in-out infinite; }
+.hero-shape-3 { width: 50px; height: 50px; background: #E9D5FF; top: 40%; right: 20%; animation: heroFloat3 11s ease-in-out infinite; }
+
+@keyframes heroFloat1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, 25px); }
+}
+@keyframes heroFloat2 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-25px, -20px); }
+}
+@keyframes heroFloat3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(15px, -30px) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hero-shape-1, .hero-shape-2, .hero-shape-3 { animation: none; }
+}
+.hero-inner { position: relative; max-width: 640px; margin: 0 auto; }
+
+.brand-icon {
+    width: 56px; height: 56px; margin: 0 auto 28px; border-radius: 16px;
+    background: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.5);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+.brand-icon .brand-logo-img { width: 62%; height: 62%; object-fit: contain; }
+.hero-title {
+    font-size: 52px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em;
+    color: var(--white); margin-bottom: 10px;
+}
+/* Each line is forced onto one row regardless of container width — the
+   <br> tags between them control where lines break, this stops the browser
+   from ALSO wrapping *within* one of those lines if it judges the
+   container too narrow. Guessing a container width wide enough for
+   "Professional Development" at this font size turned out unreliable
+   across different screens; this guarantees it outright instead. */
+.hero-title-line { display: inline-block; white-space: nowrap; }
+.hero-title .accent { color: #E9D5FF; }
+.hero-subtitle { font-size: 52px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; color: var(--white); margin-bottom: 18px; }
+.hero-tagline { font-size: 17px; color: rgba(255,255,255,.82); font-weight: 500; max-width: 460px; margin: 0 auto 32px; line-height: 1.6; }
+.hero-cta {
+    display: inline-block; background: var(--white); color: var(--dark-purple); text-decoration: none;
+    font-weight: 700; font-size: 15px; padding: 15px 32px; border-radius: 14px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.2); transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hero-cta:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(0,0,0,0.24); }
+
+/* ===== Section headings (shared) ===== */
+.section-heading { text-align: center; max-width: 480px; margin: 0 auto 32px; }
+.section-heading h2 { font-size: 28px; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; color: var(--text-dark); }
+.section-heading p { color: var(--text-muted); font-size: 14.5px; font-weight: 500; }
+
+/* ===== Featured workshop ===== */
+.featured {
+    display: grid; grid-template-columns: 240px 1fr; gap: 0;
+    background: var(--white); border: 1px solid var(--border); border-radius: 26px;
+    overflow: hidden; margin: -70px auto 64px; box-shadow: 0 20px 50px rgba(91,33,182,0.15);
+    position: relative; z-index: 2;
+}
+.featured-visual {
+    background: linear-gradient(150deg, var(--course-theme-light), var(--course-theme-dark));
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden; padding: 18px;
+}
+.featured-visual-img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto;
+    object-fit: contain; border-radius: 10px; cursor: zoom-in;
+    transition: transform 0.2s ease;
+}
+.featured-visual-img:hover { transform: scale(1.04); }
+.featured-content { padding: 36px 40px; }
+.eyebrow { font-size: 12px; font-weight: 700; color: var(--course-theme); margin-bottom: 10px; }
+.featured-title { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 10px; }
+.featured-description { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 18px; max-width: 480px; }
+.featured-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 22px; font-size: 13.5px; font-weight: 600; color: var(--text-dark); }
+.featured-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.featured-cta {
+    background: linear-gradient(120deg, var(--course-theme), var(--course-theme-dark));
+    color: var(--white); border: none; padding: 13px 26px;
+    border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit;
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+.featured-cta:hover { filter: brightness(0.92); }
+
+/* ===== Image lightbox (click-to-enlarge featured image) ===== */
+.image-lightbox-overlay {
+    position: fixed; inset: 0; background: rgba(17, 17, 17, 0.82); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 30px;
+    cursor: zoom-out; animation: lightboxFadeIn 0.15s ease;
+}
+.image-lightbox-overlay img {
+    max-width: min(90vw, 720px); max-height: 85vh; border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.45); cursor: default;
+}
+.image-lightbox-close {
+    position: absolute; top: 22px; right: 28px; color: var(--white); font-size: 30px;
+    line-height: 1; background: none; border: none; cursor: pointer; font-family: inherit;
+}
+@keyframes lightboxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== Discover / workshop cards ===== */
+.discover-section { padding: 20px 0 60px; }
+.top-cards { margin-bottom: 0; }
+#courseCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 22px; }
+
+.course-card {
+    background: var(--white); border: 1px solid var(--border); border-radius: 22px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 4px 16px rgba(17, 17, 17, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.course-card:hover { transform: translateY(-5px); box-shadow: 0 18px 36px rgba(17, 17, 17, 0.10); }
+
+.course-card-visual {
+    height: 84px; display: flex; align-items: center; justify-content: flex-end; padding: 0 20px;
+    position: relative; overflow: hidden;
+}
+.course-card-visual::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(120deg, var(--vc1, #7C3AED), var(--vc2, #A855F7));
+    opacity: 0.14;
+}
+.course-card-visual-icon { font-size: 30px; position: relative; }
+
+.course-card-body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.course-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.course-name { font-size: 18px; font-weight: 800; color: var(--text-dark); letter-spacing: -0.01em; line-height: 1.3; }
+
+.status-badge {
+    flex-shrink: 0; font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;
+}
+.status-badge.status-available { background: var(--light-green); color: #15803D; }
+.status-badge.status-limited { background: #FFFBEB; color: #B45309; }
+.status-badge.status-full { background: #FEF2F2; color: #B91C1C; }
+.status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.course-description { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+
+.course-meta { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; font-size: 12.5px; color: var(--text-dark); font-weight: 600; }
+.course-meta-row { display: flex; align-items: center; gap: 8px; }
+.course-meta-icon { flex-shrink: 0; opacity: 0.75; }
+
+.course-card-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 8px; padding-top: 14px; border-top: 1px dashed var(--border);
+}
+.seat-count { display: flex; flex-direction: column; }
+.seat-number { font-size: 22px; font-weight: 800; color: var(--text-dark); line-height: 1; }
+.seat-text { color: var(--text-muted); font-size: 11px; font-weight: 600; margin-top: 2px; }
+.gender-pill {
+    font-size: 10.5px; font-weight: 700; color: var(--accent-purple); background: #F5F3FF;
+    padding: 3px 9px; border-radius: 999px;
+}
+.card-view-link { font-size: 13px; font-weight: 700; color: var(--primary-orange); cursor: pointer; }
+
+/* ===== Journey ===== */
+.journey-section { padding: 20px 0 60px; }
+.journey { display: flex; align-items: flex-start; justify-content: center; gap: 0; flex-wrap: wrap; }
+.journey-step { width: 150px; text-align: center; }
+.journey-icon {
+    width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 16px; background: var(--light-orange);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.journey-label { font-weight: 800; font-size: 14.5px; margin-bottom: 4px; }
+.journey-step p { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.journey-connector { width: 60px; height: 2px; background: var(--border); margin-top: 27px; }
+
+/* ===== Registration form ===== */
+.register-section { padding: 20px 0 70px; }
+.form-card { background: var(--white); border: 1px solid var(--border); padding: 40px; border-radius: 24px; box-shadow: 0 4px 20px rgba(17, 17, 17, 0.04); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+input, select {
+    width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 12px;
+    font-size: 15px; background-color: var(--background); color: var(--text-dark);
+    font-family: 'Manrope', Arial, sans-serif; transition: border-color 0.15s ease;
+}
+input:focus, select:focus { outline: none; border-color: var(--course-theme); }
+.form-group-full { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.form-group-full label { font-size: 13.5px; font-weight: 700; color: var(--text-dark); }
+
+.dynamic-uploads-wrapper { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+
+.cq-registration-field { grid-column: 1 / -1; margin-top: 16px; }
+.cq-question-text { display: block; font-size: 14px; font-weight: 700; color: var(--text-dark); margin-bottom: 8px; }
+.cq-registration-field input.cq-answer-input, .cq-registration-field select.cq-answer-input {
+    width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; font-family: inherit;
+}
+.cq-choice-label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-dark); margin-bottom: 8px; cursor: pointer; }
+.cq-choice-label input { width: 16px; height: 16px; cursor: pointer; }
+.cq-grid-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.cq-grid-table th, .cq-grid-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border); }
+.cq-grid-row-label { text-align: left !important; font-weight: 600; }
+.cq-grid-table input { cursor: pointer; }
+.single-upload-box { background: var(--background); border: 2px dashed var(--border); padding: 20px; border-radius: 15px; display: flex; flex-direction: column; gap: 10px; }
+.single-upload-box label { font-size: 14px; color: var(--text-dark); font-weight: 700; }
+.single-upload-box label span { color: #DC2626; }
+.file-input { padding: 10px; background: var(--white); border: 1px solid var(--border); cursor: pointer; width: 100%; border-radius: 10px; }
+
+.form-blueprint-card { display: flex; gap: 15px; background: var(--background); padding: 12px; border-radius: 10px; align-items: center; margin-top: 4px; border: 1px solid var(--border); }
+.form-blueprint-card img { width: 85px; height: 85px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--white); }
+.form-blueprint-card div { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.form-blueprint-card div b { color: var(--text-dark); display: block; margin-bottom: 2px; }
+
+.btn-row { display: flex; margin-top: 28px; }
+.btn-register {
+    flex: 1; padding: 17px; border: none; color: var(--white);
+    background: linear-gradient(120deg, var(--course-theme), var(--course-theme-dark));
+    font-size: 16px; border-radius: 14px; cursor: pointer; font-weight: 700;
+    font-family: 'Manrope', Arial, sans-serif; transition: filter 0.15s ease, transform 0.1s ease;
+}
+.btn-register:hover:not(:disabled) { filter: brightness(0.92); }
+.btn-register:active:not(:disabled) { transform: scale(0.99); }
+.btn-register:disabled { background: #E2E8F0; color: var(--text-muted); cursor: not-allowed; filter: none; }
+.btn-register:focus-visible { outline: 2px solid var(--course-theme); outline-offset: 2px; }
+
+/* Loading state: small circles drifting/floating inside the button, same
+   translate+scale style as the sidebar's decorative moving circles — just
+   scaled down to fit, not a bounce-in-place dot loader. */
+.btn-loading-circles { position: relative; display: inline-block; width: 44px; height: 20px; vertical-align: middle; overflow: hidden; }
+.btn-loading-circle { position: absolute; border-radius: 50%; background: currentColor; }
+.btn-loading-circle-1 { width: 7px; height: 7px; top: 0; left: 0; opacity: 0.9; animation: btnCircleFloat1 1.6s ease-in-out infinite; }
+.btn-loading-circle-2 { width: 5px; height: 5px; top: 8px; left: 9px; opacity: 0.55; animation: btnCircleFloat2 1.3s ease-in-out infinite; }
+.btn-loading-circle-3 { width: 4px; height: 4px; bottom: 0; left: 18px; opacity: 0.7; animation: btnCircleFloat3 1.9s ease-in-out infinite; }
+.btn-loading-circle-4 { width: 6px; height: 6px; top: 2px; left: 24px; opacity: 0.6; animation: btnCircleFloat2 1.7s ease-in-out infinite; animation-delay: 0.3s; }
+.btn-loading-circle-5 { width: 4px; height: 4px; bottom: 1px; left: 30px; opacity: 0.85; animation: btnCircleFloat1 1.4s ease-in-out infinite; animation-delay: 0.5s; }
+.btn-loading-circle-6 { width: 5px; height: 5px; top: 6px; left: 36px; opacity: 0.5; animation: btnCircleFloat3 1.5s ease-in-out infinite; animation-delay: 0.2s; }
+.btn-loading-circle-7 { width: 3px; height: 3px; top: 0; left: 14px; opacity: 0.65; animation: btnCircleFloat2 2s ease-in-out infinite; animation-delay: 0.7s; }
+.btn-loading-circle-8 { width: 3px; height: 3px; bottom: 2px; left: 6px; opacity: 0.5; animation: btnCircleFloat1 1.8s ease-in-out infinite; animation-delay: 0.4s; }
+@keyframes btnCircleFloat1 { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(7px, 4px) scale(1.25); } }
+@keyframes btnCircleFloat2 { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-5px, -3px) scale(0.8); } }
+@keyframes btnCircleFloat3 { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-4px, 3px) scale(1.3); } }
+@media (prefers-reduced-motion: reduce) { .btn-loading-circle { animation: none; } }
+
+/* ===== Final CTA ===== */
+.final-cta {
+    background: linear-gradient(135deg, var(--primary-orange), var(--primary-orange-dark));
+    color: var(--white); text-align: center; padding: 64px 20px; margin-top: 10px;
+}
+.final-cta h2 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.01em; }
+.final-cta p { opacity: 0.92; font-size: 15px; margin-bottom: 26px; }
+.final-cta-btn {
+    display: inline-block; background: var(--white); color: var(--primary-orange); text-decoration: none;
+    font-weight: 800; font-size: 14.5px; padding: 14px 30px; border-radius: 12px;
+    transition: transform 0.15s ease;
+}
+.final-cta-btn:hover { transform: translateY(-2px); }
+
+.footer-link { color: var(--text-muted); font-size: 13px; text-decoration: underline; }
+
+.hidden-element { display: none !important; }
+.no-uploads-msg { background: var(--light-green); border: 1px dashed #BBF7D0; color: #166534; padding: 20px; border-radius: 15px; font-weight: 700; text-align: center; }
+
+@media (min-width: 641px) and (max-width: 1024px) {
+    /* Tablets and narrower laptop windows — 52px plus the widened 900px
+       title container can still be tighter than the actual viewport here,
+       risking "Professional Development" wrapping again. Shrinking a bit
+       keeps it safely on one line without waiting for the 640px mobile cut. */
+    .hero-title { font-size: 42px; }
+}
+
+@media (max-width: 780px) {
+    .featured { grid-template-columns: 1fr; margin-left: 16px; margin-right: 16px; }
+    .featured-visual { height: 100px; }
+    .journey { gap: 20px; }
+    .journey-connector { display: none; }
+}
+
+@media (max-width: 640px) {
+    .hero { padding: 60px 20px 90px; }
+    .hero-title { font-size: 36px; }
+    .hero-subtitle { font-size: 36px; }
+    .featured { margin-top: -50px; }
+    .featured-content { padding: 26px; }
+}
+
+@media (max-width: 400px) {
+    /* At 36px, "Professional Development" and "and Career Guidance" risk
+       wrapping onto an extra line on the narrowest phones despite the <br>
+       tags forcing a 3-line layout — shrinking further here keeps each
+       line genuinely on one row at any width down to a small phone. */
+    .hero-title { font-size: 27px; }
+}

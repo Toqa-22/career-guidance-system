@@ -1,0 +1,243 @@
+/* ============================================================================
+   Admin sidebar. Two important structural fixes baked in here:
+   1. The shared `body { padding: 40px 20px }` from admin.css was insetting
+      the sidebar away from the screen edges at every size — a sidebar has to
+      be flush against the viewport. That padding is cancelled here and
+      re-applied to .admin-main-wrap instead, so page content keeps its
+      breathing room without the sidebar being squeezed inward.
+   2. The sidebar's own content sits in a z-index layer above the decorative
+      moving circles, which are absolutely positioned and clipped to the
+      sidebar's bounds (overflow: hidden) so they never leak into the page.
+   ============================================================================ */
+
+body { padding: 0 !important; margin: 0; }
+
+.admin-shell { display: flex; align-items: stretch; min-height: 100vh; }
+
+.admin-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(165deg, var(--dynamic-primary-mid, #8B5CF6) 0%, var(--dynamic-primary, #7C3AED) 45%, var(--dynamic-primary-dark, #5B21B6) 85%, var(--dynamic-primary-deep, #3B0764) 100%);
+    box-shadow: 0 0 40px rgba(59, 7, 100, .25);
+    transition: background 1s ease, margin-left 0.25s ease, opacity 0.2s ease;
+}
+.admin-sidebar::-webkit-scrollbar { width: 6px; }
+.admin-sidebar::-webkit-scrollbar-track { background: transparent; }
+.admin-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 3px; }
+
+/* ---- Decorative moving circles, clipped to the sidebar ---- */
+.sidebar-shape { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.12); pointer-events: none; }
+.sidebar-shape-1 { width: 160px; height: 160px; top: -50px; left: -60px; animation: sidebarFloat1 7s ease-in-out infinite; }
+.sidebar-shape-2 { width: 110px; height: 110px; top: 40%; right: -50px; background: rgba(255,255,255,0.09); animation: sidebarFloat2 6s ease-in-out infinite; }
+.sidebar-shape-3 { width: 90px; height: 90px; bottom: 10%; left: -30px; background: rgba(255,255,255,0.1); animation: sidebarFloat3 8s ease-in-out infinite; }
+.sidebar-shape-4 { width: 60px; height: 60px; bottom: 30%; right: 10px; background: rgba(255,255,255,0.14); animation: sidebarFloat1 5s ease-in-out infinite reverse; }
+.sidebar-shape-5 { width: 45px; height: 45px; top: 60%; left: 30px; background: rgba(255,255,255,0.1); animation: sidebarFloat2 9s ease-in-out infinite reverse; }
+
+@keyframes sidebarFloat1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(40px, 55px) scale(1.15); }
+}
+@keyframes sidebarFloat2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-35px, -40px) scale(0.9); }
+}
+@keyframes sidebarFloat3 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, -35px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-shape { animation: none; }
+}
+
+/* ---- Actual sidebar content, layered above the circles ---- */
+.admin-sidebar-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 26px 18px;
+    min-height: 100%;
+}
+
+.admin-sidebar-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 28px; }
+.sidebar-username { color: rgba(255,255,255,.85); font-size: 11.5px; font-weight: 700; text-align: center; line-height: 1.4; padding: 0 4px; }
+
+.page-brand-header {
+    background: linear-gradient(120deg, var(--dynamic-primary-deep, #3B0764) 0%, var(--dynamic-primary-dark, #5B21B6) 50%, var(--dynamic-primary, #7C3AED) 100%);
+    color: white; font-weight: 800; font-size: 14px; text-align: center;
+    padding: 10px 16px; border-radius: 12px; margin-bottom: 20px; transition: background 1s ease;
+}
+.admin-brand-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+    background: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .15);
+}
+.admin-brand-icon .brand-logo-img { width: 80%; height: 80%; object-fit: contain; }
+
+.admin-sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.admin-nav-link {
+    padding: 12px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 14px;
+    font-weight: 600;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.admin-nav-link:hover { background: rgba(255, 255, 255, 0.12); color: white; }
+.admin-nav-link.active { background: rgba(255, 255, 255, 0.22); color: white; }
+
+.admin-nav-logout {
+    margin-top: 18px;
+    text-align: center;
+    padding: 12px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #3B0764;
+    font-size: 13px;
+    font-weight: bold;
+    background: white;
+}
+.admin-nav-logout:hover { background: #F5F3FF; }
+
+/* ============ Main content area — carries the padding body used to have ============ */
+.admin-main-wrap { flex: 1; min-width: 0; padding: 80px 20px 40px; }
+
+/* ============ Toggle button — fixed/floating so it never pushes the
+   sidebar over. It used to sit in the flex row *before* the sidebar as a
+   regular flex item, which reserved its own width+margin as real layout
+   space — visually shoving the sidebar to the right instead of the sidebar
+   sitting flush at the screen edge. Fixed positioning removes it from the
+   flex flow entirely. ============ */
+.sidebar-toggle-btn {
+    position: fixed;
+    top: 20px;
+    left: 254px; /* just to the right of the open 240px sidebar */
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 1px solid #F1F1F1;
+    background: white;
+    box-shadow: 0 6px 18px rgba(17, 17, 17, .12);
+    cursor: pointer;
+    transition: left 0.25s ease;
+}
+.sidebar-toggle-btn:hover { background: #F5F3FF; }
+.admin-shell.sidebar-collapsed .sidebar-toggle-btn { left: 20px; }
+
+/* Animated hamburger <-> close icon, built from 3 bars instead of a static
+   "☰" character, so it visibly responds to the sidebar's state. */
+.sidebar-toggle-bar { width: 20px; height: 2.5px; background: var(--dynamic-primary, #7C3AED); border-radius: 2px; transition: transform 0.25s ease, opacity 0.2s ease, background 1s ease; }
+.admin-shell:not(.sidebar-collapsed) .sidebar-toggle-bar:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
+.admin-shell:not(.sidebar-collapsed) .sidebar-toggle-bar:nth-child(2) { opacity: 0; }
+.admin-shell:not(.sidebar-collapsed) .sidebar-toggle-bar:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
+
+/* Collapsed state (desktop): slide the sidebar out (width + equal negative
+   margin cancel out, so main content reclaims the space) */
+.admin-shell.sidebar-collapsed .admin-sidebar {
+    margin-left: -240px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Backdrop shown behind the sidebar only when it's open as a mobile overlay */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 900px) {
+    .admin-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        min-height: 0;
+        width: 260px;
+        z-index: 300;
+        margin-left: 0;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateX(0);
+        transition: transform 0.25s ease;
+    }
+    .admin-shell.sidebar-collapsed .admin-sidebar {
+        margin-left: 0;
+        transform: translateX(-100%);
+    }
+    .sidebar-toggle-btn { left: 16px; top: 16px; }
+    .admin-shell.sidebar-collapsed .sidebar-toggle-btn { left: 16px; }
+    /* On mobile the backdrop is the way to close an open sidebar — hiding
+       the button while it's open avoids it sitting awkwardly on top of the
+       sidebar's own content. */
+    .admin-shell:not(.sidebar-collapsed) .sidebar-toggle-btn { display: none; }
+    .admin-main-wrap { padding: 70px 14px 20px; width: 100%; }
+
+    /* On mobile the sidebar overlays content, so a tap-anywhere-else backdrop
+       is the expected way to close it too, not just the toggle button. */
+    .sidebar-backdrop {
+        display: block;
+        position: fixed; inset: 0; background: rgba(17, 17, 17, 0.35);
+        z-index: 290; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    }
+    .admin-shell:not(.sidebar-collapsed) .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+}
+
+@media (max-width: 480px) {
+    .admin-sidebar { width: 82vw; }
+}
+
+@media print {
+    .admin-sidebar, .sidebar-toggle-btn, .sidebar-backdrop, .no-print { display: none !important; }
+    .admin-main-wrap { padding: 0 !important; width: 100% !important; }
+    body { background: white !important; }
+    /* Keeps each card whole on one page instead of splitting mid-element
+       across a page break. */
+    .chart-card, .stat-tile { break-inside: avoid; page-break-inside: avoid; }
+    /* The month's activity list scrolls on-screen (max-height + overflow),
+       but a scroll container only prints what's currently visible inside
+       it — removing the constraint here lets the full list print instead
+       of being cut off. */
+    .activity-cal-detail { max-height: none !important; overflow: visible !important; }
+
+    /* The Activity Calendar specifically: even with break-inside:avoid,
+       an element taller than one page WILL still split — "avoid" only
+       works if the content can actually fit. So this both starts it on
+       its own fresh page (maximizing the room it has) and shrinks its
+       cells/text enough that a normal month's worth of activities fits
+       within that one page. */
+    .chart-activity-cal-card {
+        break-before: page; page-break-before: always;
+        padding: 14px !important;
+    }
+    .chart-activity-cal-card .activity-cal-hall-link { display: none !important; }
+    .chart-activity-cal-card .activity-cal-day { min-height: 34px !important; padding: 3px !important; }
+    .chart-activity-cal-card .activity-cal-day-num { font-size: 10.5px !important; }
+    .chart-activity-cal-card .activity-cal-day-pill { font-size: 7.5px !important; padding: 0 3px !important; }
+    .chart-activity-cal-card .activity-cal-grid { gap: 3px !important; }
+    .chart-activity-cal-card .activity-cal-nav { margin-bottom: 8px !important; }
+    .chart-activity-cal-card table.activity-cal-month-table { font-size: 10.5px !important; }
+    .chart-activity-cal-card table.activity-cal-month-table td { padding: 4px 8px !important; }
+    .chart-activity-cal-card table.activity-cal-month-table tr { break-inside: avoid; page-break-inside: avoid; }
+}

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics Dashboard</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated.
+     This dashboard has no data of its own worth separately locking down — it
+     only aggregates the same courses/registrations data every other admin
+     page already reads with the same anon key — so the existing
+     login gate is the right (and consistent) boundary here too. -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/chart.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<!-- Chart.js: no charting library existed in this project yet; this is the
+     smallest well-maintained option and loads as a plain global script,
+     exactly like xlsx-js-style/jsPDF already do elsewhere in this app. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link active" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+    <div class="chart-page-heading">
+        <div>
+            <h1>Analytics Dashboard</h1>
+            <p>A live view of registrations and course activity — built from the same data as the rest of the app.</p>
+        </div>
+        <button type="button" class="dashboard-print-btn no-print" onclick="window.print()">🖨 Print</button>
+    </div>
+
+    <!-- ============ FILTERS ============ -->
+    <div class="chart-card chart-filters-card">
+        <div class="chart-filters-row">
+            <div class="chart-filter-group">
+                <label for="chartDateRangeSelect">Date Range</label>
+                <select id="chartDateRangeSelect">
+                    <option value="all">All time</option>
+                    <option value="today">Today</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="this_month">This month</option>
+                    <option value="last_month">Last month</option>
+                    <option value="this_year">This year</option>
+                    <option value="custom">Custom range…</option>
+                </select>
+            </div>
+            <div class="chart-filter-group hidden-element" id="chartCustomDateGroup">
+                <label>Custom Range</label>
+                <div class="chart-custom-date-inputs">
+                    <input type="date" id="chartCustomFrom">
+                    <input type="date" id="chartCustomTo">
+                </div>
+            </div>
+            <div class="chart-filter-group">
+                <label for="chartCourseSelect">Course</label>
+                <select id="chartCourseSelect"><option value="">All Activity</option></select>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ KPI CARDS ============ -->
+    <div class="dashboard-stats chart-kpi-grid" id="chartKpiGrid">
+        <!-- Filled by js/chart.js — shows a loading skeleton until the first fetch resolves -->
+    </div>
+
+    <!-- ============ TODAY'S HALL RESERVATIONS ============ -->
+    <div class="chart-card chart-today-card">
+        <div class="chart-card-header">
+            <h3>Today's Hall Reservations</h3>
+            <span class="chart-card-subtitle" id="chartTodayDateLabel"></span>
+        </div>
+        <div id="chartTodayList">
+            <p class="chart-today-empty">Loading…</p>
+        </div>
+    </div>
+
+    <!-- ============ ACTIVITY CALENDAR ============ -->
+    <div class="chart-card chart-activity-cal-card">
+        <div class="chart-card-header">
+            <h3>Activity Calendar</h3>
+            <span class="chart-card-subtitle">Days with a scheduled activity</span>
+        </div>
+        <a href="hall-reservation.html" class="activity-cal-hall-link">📅 Open Hall Reservation →</a>
+        <div class="activity-cal-nav">
+            <button type="button" id="activityCalPrev" class="activity-cal-arrow" aria-label="Previous month">‹</button>
+            <div class="activity-cal-nav-selects">
+                <select id="activityCalMonthSelect" aria-label="Month"></select>
+                <select id="activityCalYearSelect" aria-label="Year"></select>
+            </div>
+            <button type="button" id="activityCalNext" class="activity-cal-arrow" aria-label="Next month">›</button>
+        </div>
+        <div class="activity-cal-weekdays">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="activity-cal-grid" id="activityCalGrid"></div>
+        <div class="activity-cal-detail hidden-element" id="activityCalDetail">
+            <table class="activity-cal-month-table" id="activityCalMonthTable"></table>
+        </div>
+    </div>
+
+    <!-- ============ CHARTS ============ -->
+    <!-- Row: Smooth Line + Area -->
+    <div class="chart-grid">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Registrations by Month</h3>
+                <span class="chart-card-subtitle">Smooth line — last 12 months</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartMonthly" role="img" aria-label="Line chart of registrations per month over the last 12 months"></canvas></div>
+            <div class="chart-state-overlay" id="chartMonthlyState"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Cumulative Growth</h3>
+                <span class="chart-card-subtitle">Area — running total, last 12 months</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartCumulative" role="img" aria-label="Area chart of cumulative registrations over the last 12 months"></canvas></div>
+            <div class="chart-state-overlay" id="chartCumulativeState"></div>
+        </div>
+    </div>
+
+    <!-- Row: Bar + Horizontal Bar -->
+    <div class="chart-grid">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Institution Participation</h3>
+                <span class="chart-card-subtitle">Bar — top 8 institutions in range</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartInstitution" role="img" aria-label="Bar chart of registrations per institution"></canvas></div>
+            <div class="chart-state-overlay" id="chartInstitutionState"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Registrations by Course</h3>
+                <span class="chart-card-subtitle">Horizontal bar — top 8 courses in range</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartByCourse" role="img" aria-label="Horizontal bar chart of registrations per course"></canvas></div>
+            <div class="chart-state-overlay" id="chartByCourseState"></div>
+        </div>
+    </div>
+
+    <!-- Row: Doughnut + Gauge -->
+    <div class="chart-grid">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Designation Breakdown</h3>
+                <span class="chart-card-subtitle">Doughnut — share of participants in range</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartDesignation" role="img" aria-label="Doughnut chart of registrations by designation"></canvas></div>
+            <div class="chart-state-overlay" id="chartDesignationState"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Open Registration Rate</h3>
+                <span class="chart-card-subtitle">Gauge — % of all courses currently open for registration</span>
+            </div>
+            <div class="chart-canvas-wrap chart-gauge-wrap">
+                <canvas id="chartGauge" role="img" aria-label="Gauge chart of the percentage of courses currently open for registration"></canvas>
+                <div class="chart-gauge-label" id="chartGaugeLabel"></div>
+            </div>
+            <div class="chart-state-overlay" id="chartGaugeState"></div>
+        </div>
+    </div>
+
+    <!-- Row: Stacked Bar (full width) -->
+    <div class="chart-grid chart-grid-single">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Monthly Registrations by Gender</h3>
+                <span class="chart-card-subtitle">Stacked bar — last 12 months</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartStacked" role="img" aria-label="Stacked bar chart of monthly registrations split by gender"></canvas></div>
+            <div class="chart-state-overlay" id="chartStackedState"></div>
+        </div>
+    </div>
+
+    <!-- Row: Funnel + Radar -->
+    <div class="chart-grid">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Course Capacity Funnel</h3>
+                <span class="chart-card-subtitle">Funnel — total courses → with registrations → fully booked</span>
+            </div>
+            <div class="chart-funnel-wrap" id="chartFunnel"></div>
+            <div class="chart-state-overlay" id="chartFunnelState"></div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Top Institutions Compared</h3>
+                <span class="chart-card-subtitle">Radar — normalized across 3 metrics</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartRadar" role="img" aria-label="Radar chart comparing top institutions across registrations, courses joined, and average registrations per course"></canvas></div>
+            <div class="chart-state-overlay" id="chartRadarState"></div>
+        </div>
+    </div>
+
+    <!-- Row: Department Coverage (full width) -->
+    <div class="chart-grid chart-grid-single">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <h3>Department Coverage</h3>
+                <span class="chart-card-subtitle">Bar — total staff vs. staff who've attended at least one workshop, per institution (all time)</span>
+            </div>
+            <div class="chart-canvas-wrap"><canvas id="chartCoverage" role="img" aria-label="Bar chart comparing total staff to workshop attendees per institution"></canvas></div>
+            <div class="chart-state-overlay" id="chartCoverageState"></div>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+<script type="module" src="../js/chart-dashboard.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

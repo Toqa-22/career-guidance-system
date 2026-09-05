@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Department Hall Requests</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/workshops.css">
+<link rel="stylesheet" href="css/hall-reservation.css">
+<link rel="stylesheet" href="css/notifications.css">
+<script src="js/theme-rotator.js"></script>
+<script src="js/notify.js"></script>
+</head>
+<body>
+
+<div class="simple-page-container" style="max-width: 900px;">
+
+    <div class="simple-header">
+        <div class="brand-icon" aria-hidden="true">
+            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+        </div>
+        <p class="simple-header-kicker">Ibra Hospital<br>Professional Development and Career Guidance</p>
+        <h1>Department Hall Requests</h1>
+        <p>See what's already booked, then request a hall for your department's activity.</p>
+    </div>
+
+    <div class="hall-card" style="margin-bottom: 22px;">
+        <div class="hall-calendar-nav">
+            <button type="button" id="calPrevMonth" class="hall-cal-arrow" aria-label="Previous month">‹</button>
+            <div class="hall-calendar-nav-selects">
+                <select id="calMonthSelect" aria-label="Month"></select>
+                <select id="calYearSelect" aria-label="Year"></select>
+            </div>
+            <button type="button" id="calNextMonth" class="hall-cal-arrow" aria-label="Next month">›</button>
+        </div>
+
+        <div class="hall-legend" id="hallLegendFilter">
+            <button type="button" class="hall-legend-btn active" data-hall="">All Halls</button>
+        </div>
+
+        <div class="hall-cal-weekdays">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="hall-cal-grid" id="hallCalGrid" aria-live="polite"></div>
+
+        <div class="hall-day-detail" id="hallDayDetail">
+            <p class="hall-day-detail-placeholder">Select a day to see what's already booked.</p>
+        </div>
+    </div>
+
+    <div class="hall-card">
+        <h3>Request a Booking</h3>
+        <p class="hall-field-hint" style="margin-top:0;">Your request goes to the admin team for approval — it won't appear as a confirmed booking until then.</p>
+        <form id="hallRequestForm">
+            <label class="hall-field-label">Hall</label>
+            <select id="reqHallSelect" required></select>
+
+            <label class="hall-field-label">Activity Name</label>
+            <input type="text" id="reqCourseName" placeholder="Activity / event name" required>
+
+            <label class="hall-field-label">Type of Reservation</label>
+            <select id="reqReservationType" required>
+                <option value="Meeting">Meeting</option>
+                <option value="Lecture">Lecture</option>
+                <option value="Workshop">Workshop</option>
+                <option value="CME">CME</option>
+            </select>
+
+            <label class="hall-field-label">Name of Organizer</label>
+            <input type="text" id="reqOrganizerName" placeholder="Organizer's name" required>
+
+            <label class="hall-field-label">Phone Number</label>
+            <input type="tel" id="reqPhoneNumber" placeholder="Number to connect" required>
+
+            <label class="hall-field-label">Number of Participants (optional)</label>
+            <input type="number" id="reqParticipantCount" placeholder="e.g. 25" min="0">
+
+            <label class="hall-field-label">Date(s) &amp; Time</label>
+            <div id="reqDatesContainer"></div>
+            <button type="button" class="hall-add-date-btn" id="reqAddDateBtn">+ Add Another Date</button>
+            <p class="hall-field-hint">Add as many dates as you need — each one can have its own time.</p>
+
+            <button type="submit" class="hall-submit-btn" id="reqSubmitBtn">Submit Request</button>
+            <p class="hall-form-note" id="reqFormNote"></p>
+        </form>
+    </div>
+
+</div>
+
+<script type="module" src="js/department-hall-request.js"></script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Participant Dashboard</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/report.css">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<!-- Plain <script> tags, NOT type="module" — xlsx-js-style must be loaded this
+     way to expose the global XLSX object; excel-export.js depends on it -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../js/excel-export.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <a href="dashboard.html" class="return-to-dashboard-link">← Return to Activity Dashboard</a>
+
+        <div id="courseFilterBanner"></div>
+
+        <div class="stats" id="stats"></div>
+
+        <div class="table-card">
+            <div class="table-header-row">
+                <h2>Participant Registrations</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select id="attendanceFilter" style="padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; font-family:inherit;">
+                        <option value="all">All Participants</option>
+                        <option value="attended">Attended Only</option>
+                        <option value="not_attended">Not Attended Only</option>
+                    </select>
+                    <button class="export-btn" id="exportCSVBtn" onclick="exportCSV()">Export Data (Excel)</button>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Phone Number</th>
+                        <th>Participant Name</th>
+                        <th>Staff Number</th>
+                        <th>Gender</th>
+                        <th>Institution Origin</th>
+                        <th>Course Target</th>
+                        <th>Course Date</th>
+                        <th>Attended</th>
+                        <th>Answers</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+            <div class="pg-controls" id="studentsPagination"></div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/students.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

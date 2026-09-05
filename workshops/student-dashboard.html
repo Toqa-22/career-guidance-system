@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Participant Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/workshops.css">
+<link rel="stylesheet" href="css/notifications.css">
+<link rel="stylesheet" href="css/responsive.css">
+<script src="js/notify.js"></script>
+</head>
+<body>
+
+<div class="simple-page-container">
+
+    <div class="simple-header">
+        <div class="brand-icon" aria-hidden="true">
+            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+        </div>
+        <h1>Participant Dashboard</h1>
+        <p>View your own registrations and download your certificates.</p>
+    </div>
+
+    <div class="form-card" style="max-width: 600px; margin: 0 auto;">
+        <label style="font-size:14px; font-weight:bold; color:#334155; display:block; margin-bottom:8px;">Your Staff Number</label>
+        <input type="text" id="studentStaffNumberInput" placeholder="e.g. EMP1001" style="margin-bottom:16px;">
+        <button class="btn-register" id="viewDashboardBtn" style="width:100%;">View My Dashboard</button>
+        <div id="studentDashboardError" class="hidden-element" style="margin-top:16px; background:#fff5f5; border:1px solid #fed7d7; color:#b91c1c; padding:16px; border-radius:12px; font-size:14px; line-height:1.5;"></div>
+    </div>
+
+    <div id="studentDashboardResults" class="hidden-element" style="max-width: 900px; margin: 40px auto 0;">
+
+        <h2 style="color:#0f172a; margin-bottom:16px;">My Registrations</h2>
+        <div id="myRegistrationsList" style="display:flex; flex-direction:column; gap:14px; margin-bottom:40px;"></div>
+
+        <h2 style="color:#0f172a; margin-bottom:16px;">My Certificates</h2>
+        <div id="myCertificatesList" style="display:flex; flex-direction:column; gap:14px;"></div>
+    </div>
+</div>
+
+<script type="module" src="js/student-dashboard.js"></script>
+</body>
+</html>

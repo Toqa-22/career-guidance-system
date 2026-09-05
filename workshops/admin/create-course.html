@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Activity</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/multiselect.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link active" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+        
+        <div class="grid-panel">
+            <div class="card-box">
+                <h2 id="formPanelTitle">Create New Activity</h2>
+                <button id="cancelEditBtn" class="btn-cancel style-chosen hidden-element">Cancel Edit Operational Mode</button>
+                <form id="courseConfigForm">
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">1</span> Basic Course Information</div>
+                        <div class="basic-info-fields">
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <span class="field-label">Activity Name</span>
+                                    <input type="text" id="courseName" placeholder="Activity Name (e.g. BLS)" required>
+                                </div>
+                            </div>
+
+                            <div class="input-row date-triple-row" style="grid-template-columns: 1fr 1fr 1fr;">
+                                <div>
+                                    <span class="field-label">Registration Opens</span>
+                                    <input type="date" id="courseRegOpenDate" placeholder="Registration Opens (optional)">
+                                </div>
+                                <div>
+                                    <span class="field-label">Registration Closes</span>
+                                    <input type="date" id="courseEndDate" placeholder="Registration Closes (optional)">
+                                </div>
+                                <div>
+                                    <span class="field-label">Activity Date</span>
+                                    <input type="date" id="courseDate" required>
+                                </div>
+                            </div>
+                            <p class="section-hint" style="margin-top: -6px;">Leave "Registration Opens" blank to open registration as soon as you save this course. Leave "Registration Closes" blank to keep registration open indefinitely — once it passes, the public page shows "Registration Closed" instead of the form.</p>
+
+                            <div class="input-row" style="align-items: center;">
+                                <label style="display:flex; align-items:center; gap:10px; background:white; border:1px solid #d1d5db; border-radius:12px; padding:12px 14px; cursor:pointer;">
+                                    <input type="checkbox" id="unlimitedSeatsToggle" checked style="width:16px; height:16px; cursor:pointer;">
+                                    <span style="font-size:13px; font-weight:700; color:#334155;">Unlimited Seats</span>
+                                </label>
+                                <input type="number" id="courseSeats" placeholder="Chairs Limit (e.g. 5)" min="0" class="hidden-element">
+                            </div>
+
+                            <div class="input-row">
+                                <select id="courseGender" required>
+                                    <option value="Both">Target Gender: Both</option>
+                                    <option value="Male">Male Only</option>
+                                    <option value="Female">Female Only</option>
+                                </select>
+                                <input type="text" id="courseInstructorName" placeholder="Organized by (optional)">
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <input type="number" id="courseParticipantCount" placeholder="Number of Participants (optional)" min="0">
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <label class="hall-checkbox-label" style="margin-top:0;">
+                                    <input type="checkbox" id="courseAttendanceRequired" checked>
+                                    Attendance required before a certificate can be issued
+                                </label>
+                            </div>
+
+
+
+                            <div class="input-row" style="grid-template-columns: 1fr; align-items: center;">
+                                <label style="display:flex; align-items:center; gap:10px; background:white; border:1px solid #d1d5db; border-radius:12px; padding:10px 14px; flex:1; cursor:pointer;">
+                                    <span style="font-size:13px; font-weight:700; color:#334155; white-space:nowrap;">Theme Color</span>
+                                    <input type="color" id="courseThemeColor" value="#7C3AED" style="width:42px; height:32px; padding:0; border:1px solid #d1d5db; border-radius:8px; cursor:pointer;">
+                                    <span id="courseThemeColorPreview" style="font-size:12px; color:#94a3b8;">#7C3AED</span>
+                                </label>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">Used for the buttons and accents on this course's public registration page (a light-to-dark range is generated automatically from it).</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr; align-items: flex-start;">
+                                <div style="flex:1;">
+                                    <label style="font-size:13px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Event Poster (optional)</label>
+                                    <input type="file" id="courseImageInput" accept="image/*" style="width:100%; padding:10px; background:white; border:1px solid #d1d5db; border-radius:12px; cursor:pointer;">
+                                    <div id="courseImagePreviewBox" style="margin-top:8px; display:none;">
+                                        <img id="courseImagePreview" src="" style="max-width:140px; max-height:140px; object-fit:cover; border-radius:10px; border:1px solid #d1d5db; display:block;">
+                                        <button type="button" id="removeCourseImageBtn" class="btn-remove" style="margin-top:6px;">✕ Remove Poster</button>
+                                    </div>
+                                    <p class="section-hint">Shown in place of the default icon on the Featured Workshop card of the public registration page.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">2</span> Target Designations &amp; Seats</div>
+                        <select id="designationModeSelect" style="margin-bottom: 10px;" required>
+                            <option value="All">All Designations Allowed</option>
+                            <option value="Custom">Choose Specific Designations...</option>
+                        </select>
+                        <div id="customDesignationsBox" class="hidden-element" style="background: white; border: 1px solid #d1d5db; border-radius: 12px; padding: 15px;">
+                            <p class="section-hint" style="margin-bottom:10px;">Check a role and set how many seats it gets — leave the seats box blank for that role to have unlimited seats:</p>
+                            <div class="input-row" style="grid-template-columns: 1fr auto; margin-bottom: 14px;">
+                                <input type="text" id="customDesignationNameInput" placeholder="Add another designation (e.g. Social Workers)">
+                                <button type="button" id="addCustomDesignationBtn" class="btn-action-inline">+ Add</button>
+                            </div>
+                            <div class="designation-grid" id="designationGrid"></div>
+                            <p style="font-size: 11.5px; color: #94a3b8; margin-top: 10px;">These seats are counted separately from — and within — the course's overall seat limit above.</p>
+                        </div>
+
+                        <p class="section-hint" style="margin-top: 18px;">For each field below, choose one or more specific options, or select "All" to open it to everyone. At least one selection is required per field.</p>
+                        <div id="targetingFieldsContainer"></div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">3</span> Required Documents</div>
+                        <select id="documentRequirementSelect" style="margin-bottom: 10px;" required>
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                        
+                        <div id="documentRulesConfigContainer" class="hidden-element">
+                            <div id="fileArrayWrapper"></div>
+                            <button type="button" class="btn-action btn-add" id="addFileRuleRowBtn" style="margin-top: 5px;">+ Append Dynamic Document Target Row</button>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">4</span> Institutional Allocations / Chair Mapping (optional)</div>
+                        <label class="hall-checkbox-label" style="margin-bottom:14px;">
+                            <input type="checkbox" id="allocationSectionToggle">
+                            Set specific institution/chair limits for this activity
+                        </label>
+
+                        <div id="allocationSectionBody" class="hidden-element">
+                        <div class="allocation-controls">
+                            <select id="allocationBulkSelectAction" style="padding: 10px; font-size: 13px;">
+                                <option value="">-- Bulk Select Toggles --</option>
+                                <option value="ALL">Select All Visible</option>
+                                <option value="IBRA_ALL">Select All Ibra</option>
+                                <option value="OTHER_ALL">Select All Other</option>
+                                <option value="NONE">Deselect All Visible</option>
+                            </select>
+                        </div>
+
+                        <div class="allocation-bulk-row">
+                            <input type="number" id="bulkSeatsCountInput" placeholder="Bulk Chairs Value (e.g. 3)" min="0" style="padding: 10px; font-size: 13px;">
+                            <select id="bulkSeatsTargetFilter" style="padding: 10px; font-size: 13px; max-width: 180px;">
+                                <option value="VISIBLE">Apply to Visible & Checked</option>
+                                <option value="IBRA">Apply to Ibra Only</option>
+                                <option value="OTHER">Apply to Other Only</option>
+                            </select>
+                            <button type="button" class="btn-action btn-add" id="applyBulkSeatsBtn">Apply Bulk Seats</button>
+                        </div>
+
+                        <!-- Ibra and Other are always both shown, so admin can pick from either -->
+                        <div id="ibraSectionBox" style="margin-bottom: 15px;">
+                            <div class="subsection-title">Ibra Settings</div>
+                            <div class="allocation-container" id="allocationWrapperIbra"></div>
+                        </div>
+
+                        <div id="otherSectionBox">
+                            <div class="subsection-title">Other Settings</div>
+                            <div class="allocation-container" id="allocationWrapperOther"></div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">5</span> Book a Hall (optional)</div>
+                        <label style="display:flex; align-items:center; gap:10px; background:white; border:1px solid #d1d5db; border-radius:12px; padding:12px 14px; cursor:pointer; margin-bottom: 14px;">
+                            <input type="checkbox" id="bookHallToggle" style="width:16px; height:16px; cursor:pointer;">
+                            <span style="font-size:13px; font-weight:700; color:#334155;">Also reserve a hall for this activity</span>
+                        </label>
+
+                        <div id="bookHallFields" class="hidden-element">
+                            <div class="input-row">
+                                <select id="chBallSelect">
+                                    <option value="Ibn Al-Thhabi">Ibn Al-Thhabi</option>
+                                    <option value="Library">Library</option>
+                                </select>
+                                <select id="chReservationType">
+                                    <option value="Meeting">Meeting</option>
+                                    <option value="Lecture">Lecture</option>
+                                    <option value="Workshop" selected>Workshop</option>
+                                    <option value="CME">CME</option>
+                                </select>
+                            </div>
+                            <div class="input-row">
+                                <input type="text" id="chEntranceName" placeholder="Entrance name">
+                                <input type="text" id="chOrganizerName" placeholder="Organizer's name">
+                            </div>
+                            <div class="input-row">
+                                <input type="tel" id="chPhoneNumber" placeholder="Number to connect">
+                            </div>
+                            <div class="input-row" style="align-items: center;">
+                                <span class="section-hint" style="margin: 0;">Date range</span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <input type="date" id="chDateFrom">
+                                    <span style="color:#94a3b8;">to</span>
+                                    <input type="date" id="chDateTo">
+                                </div>
+                            </div>
+                            <div class="input-row" style="align-items: center;">
+                                <span class="section-hint" style="margin: 0;">Hour</span>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <input type="time" id="chStartTime">
+                                    <span style="color:#94a3b8;">to</span>
+                                    <input type="time" id="chEndTime">
+                                </div>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">Uses the same conflict check as Hall Reservation — the booking will appear there and on its calendar once this activity is saved.</p>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">6</span> Custom Questions (optional)</div>
+                        <p class="section-hint" style="margin-top:-6px;">Add extra questions participants can optionally answer during registration.</p>
+                        <div id="customQuestionsList"></div>
+                        <button type="button" class="btn-action btn-add" id="addQuestionBtn" style="margin-top:10px;">+ Add Question</button>
+                    </div>
+
+                    <!-- Primary Actions Row -->
+                    <div class="button-group">
+                        <button type="submit" class="btn-flex btn-primary-action" id="submitFormBtn">Save</button>
+                        <button type="button" class="btn-flex btn-secondary" onclick="clearForm()">Clear Form</button>
+                    </div>
+
+                    <!-- Template Presets Row Under Save/Clear Buttons -->
+                    <div class="button-group">
+                        <button type="button" class="btn-flex btn-preset" id="loadBlsPresetBtn">Load BLS Info Template</button>
+                        <button type="button" class="btn-flex btn-preset" id="loadAclsPresetBtn">Load ACLS Info Template</button>
+                    </div>
+                    
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/create-course.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>

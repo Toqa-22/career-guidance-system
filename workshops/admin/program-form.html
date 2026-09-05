@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dite Form</title>
+<script src="../js/auth-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/program-form.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<script src="../js/notify.js"></script>
+<!-- Plain <script> tag, NOT type="module" — xlsx-js-style must load this way -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="create-course.html">Create Activity</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link active" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+    <div class="pf-page-heading">
+        <div>
+            <h1>Dite Form</h1>
+            <p>Includes every activity from Create Activity AND every booking on the Hall Reservation calendar. Fill in the details below, then export — matching the official template exactly.</p>
+        </div>
+        <button type="button" class="pf-btn pf-btn-primary" id="pfExportBtn">Print</button>
+    </div>
+
+    <div class="pf-card" style="margin-bottom: 18px;">
+        <div class="pf-period-row">
+            <label>Period</label>
+            <input type="date" id="pfPeriodFrom">
+            <span>to</span>
+            <input type="date" id="pfPeriodTo">
+            <button type="button" class="pf-btn pf-btn-small" id="pfPeriodClearBtn">Clear</button>
+            <span class="pf-period-hint">Filters which activities are shown below and included in the Excel export — leave blank to include everything.</span>
+        </div>
+    </div>
+
+    <div class="pf-card">
+        <div class="pf-table-scroll">
+        <table class="pf-table" id="pfTable">
+            <thead>
+                <tr>
+                    <th>م</th>
+                    <th>اسم البرنامج<br><span class="pf-th-en">Program Name</span></th>
+                    <th>فترة التنفيذ<br><span class="pf-th-en">Period</span></th>
+                    <th>رقم التواصل<br><span class="pf-th-en">Contact (manual)</span></th>
+                    <th>الجهة المنفذة<br><span class="pf-th-en">Executing Entity</span></th>
+                    <th>عدد الساعات<br><span class="pf-th-en">Hours</span></th>
+                    <th>التكلفة الفعلية<br><span class="pf-th-en">Actual Cost</span></th>
+                    <th>نوع التغذية<br><span class="pf-th-en">Catering</span></th>
+                    <th>القرطاسية<br><span class="pf-th-en">Stationery</span></th>
+                    <th>عدد المتدربين<br><span class="pf-th-en">Trainees</span></th>
+                    <th>مكان التنفيذ<br><span class="pf-th-en">Place</span></th>
+                    <th>ضمن الخطة السنوية 2026<br><span class="pf-th-en">In Annual Plan</span></th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="pfTableBody">
+                <tr class="pf-empty-row"><td colspan="13">Loading…</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p class="pf-note" id="pfNote"></p>
+    </div>
+
+    </div>
+    </div>
+</div>
+
+<script type="module" src="../js/program-form.js"></script>
+<script src="../js/sidebar.js"></script>
+</body>
+</html>
