@@ -116,10 +116,22 @@ window.exportStaffReport = function () {
 
 // Report tool 2: every registration within a date range, any staff member,
 // optionally narrowed to one course.
+// Shared by both exports below — matches a registration's snapshot
+// institution name against the selected category. "Ibra - " prefixed names
+// are the Ibra category; everything else is the "Health Center" (Other)
+// category, matching the same convention used for institutions everywhere
+// else in the app.
+function matchesInstitutionCategory(registration, category) {
+    if (category === 'BOTH' || !category) return true;
+    const isIbra = (registration.institution_name_snapshot || '').startsWith('Ibra - ');
+    return category === 'IBRA' ? isIbra : !isIbra;
+}
+
 window.exportDateRangeReport = function () {
     const fromStr = document.getElementById('reportRangeFrom').value;
     const toStr = document.getElementById('reportRangeTo').value;
     const courseId = document.getElementById('reportRangeCourse').value;
+    const institutionCategory = document.getElementById('reportRangeInstitution').value;
 
     if (!fromStr || !toStr) {
         alert('Please choose both a from and to date.');
@@ -128,7 +140,8 @@ window.exportDateRangeReport = function () {
 
     const filtered = allRegistrationsRaw.filter(r =>
         isWithinRange(r.created_at, fromStr, toStr) &&
-        (!courseId || String(r.course_id) === courseId)
+        (!courseId || String(r.course_id) === courseId) &&
+        matchesInstitutionCategory(r, institutionCategory)
     );
 
     const courseLabel = courseId ? (coursesCached.find(c => String(c.id) === courseId)?.name || 'course').replace(/[^a-z0-9]+/gi, '_') : 'all_courses';
@@ -142,6 +155,7 @@ window.exportDateRangeReportPdf = async function () {
     const fromStr = document.getElementById('reportRangeFrom').value;
     const toStr = document.getElementById('reportRangeTo').value;
     const courseId = document.getElementById('reportRangeCourse').value;
+    const institutionCategory = document.getElementById('reportRangeInstitution').value;
 
     if (!fromStr || !toStr) {
         alert('Please choose both a from and to date.');
@@ -150,11 +164,12 @@ window.exportDateRangeReportPdf = async function () {
 
     const filtered = allRegistrationsRaw.filter(r =>
         isWithinRange(r.created_at, fromStr, toStr) &&
-        (!courseId || String(r.course_id) === courseId)
+        (!courseId || String(r.course_id) === courseId) &&
+        matchesInstitutionCategory(r, institutionCategory)
     );
 
     if (filtered.length === 0) {
-        alert('No registrations match that course/date range — nothing to report.');
+        alert('No registrations match that course/date range/institution — nothing to report.');
         return;
     }
 
@@ -199,16 +214,17 @@ window.exportDateRangeReportPdf = async function () {
 
         doc.setFontSize(16);
         doc.setTextColor(20);
-        doc.text('Full Report by Date Range', 14, 68);
+        doc.text('Activity Staff Attendant', 14, 68);
         doc.setFontSize(10);
         doc.setTextColor(90);
         doc.text(`Course: ${courseLabel}`, 14, 76);
-        doc.text(`Date range: ${rangeLabel}`, 14, 82);
-        doc.text(`Total participants: ${rows.length}`, 14, 88);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 94);
+        doc.text(`Institution: ${institutionCategory === 'IBRA' ? 'Ibra' : institutionCategory === 'OTHER' ? 'Health Center' : 'Both'}`, 14, 82);
+        doc.text(`Date range: ${rangeLabel}`, 14, 88);
+        doc.text(`Total participants: ${rows.length}`, 14, 94);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 100);
 
         doc.autoTable({
-            startY: 102,
+            startY: 108,
             head: [['Staff Number', 'Participant Name', 'Number of Courses Enrolled']],
             body: rows,
             styles: { fontSize: 9 },
