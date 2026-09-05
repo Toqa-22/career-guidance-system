@@ -44,9 +44,9 @@
         .report-tool-card h3 { font-size: 16px; color: #0f172a; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
         .report-tool-card p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
         .report-tool-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-        .report-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 130px; }
+        .report-field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 130px; min-width: 0; }
         .report-field-label { font-size: 10.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
-        .report-tool-row input[type="text"], .report-tool-row input[type="date"], .report-tool-row select { padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 13.5px; width: 100%; font-family: inherit; background: white; box-sizing: border-box; }
+        .report-tool-row input[type="text"], .report-tool-row input[type="date"], .report-tool-row select { padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 13.5px; width: 100%; min-width: 0; font-family: inherit; background: white; box-sizing: border-box; }
         .report-tool-row input:focus, .report-tool-row select:focus { outline: none; border-color: var(--dynamic-primary, #7C3AED); }
         .report-tool-row .btn-action { padding: 11px 18px; border: none; border-radius: 10px; font-size: 13.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
         .btn-add { background: linear-gradient(90deg, var(--dynamic-primary, #7C3AED), var(--dynamic-primary-dark, #5B21B6)); color: white; }
