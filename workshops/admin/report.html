@@ -84,12 +84,20 @@
             </div>
 
             <div class="report-tool-card">
-                <h3>Full Report by Date Range</h3>
-                <p>Export every registration record within a date range, optionally for one course.</p>
+                <h3>Activity Staff Attendant</h3>
+                <p>Export every registration record within a date range, optionally for one course and one institution category.</p>
                 <div class="report-tool-row">
                     <div class="report-field">
                         <label class="report-field-label">Course</label>
                         <select id="reportRangeCourse"><option value="">All Activity</option></select>
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">Institution</label>
+                        <select id="reportRangeInstitution">
+                            <option value="BOTH">Both</option>
+                            <option value="IBRA">Ibra</option>
+                            <option value="OTHER">Health Center</option>
+                        </select>
                     </div>
                     <div class="report-field">
                         <label class="report-field-label">From</label>
