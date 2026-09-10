@@ -121,6 +121,25 @@
                     <input type="text" id="otherInstitutionFreeText" class="hidden-element" placeholder="Type your institution / health center name" style="margin-top: 10px;">
                 </div>
 
+                <input type="text" id="staffName" class="hidden-element" placeholder="Your Full Name" required>
+                <input type="text" id="staffNumber" class="hidden-element" placeholder="Staff Number" required>
+                <input type="tel" id="phoneNumber" class="hidden-element" placeholder="Phone Number" required>
+                
+                <select id="sexSelect" class="hidden-element" required>
+                    <option value="">-- Gender --</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+                
+                <div id="designationFieldWrapper" class="hidden-element">
+                    <select id="designationSelect" required>
+                        <option value="">-- Designation --</option>
+                    </select>
+                    <input type="text" id="otherDesignationInput" placeholder="Specify Designation" class="hidden-element" style="margin-top: 10px;">
+                </div>
+
+                <input type="text" id="specializationInput" class="hidden-element" placeholder="current post" required>
+
                 <div class="form-group-full hidden-element" id="regFieldWrapper_job_level">
                     <label for="reg_job_level">Job Level</label>
                     <select id="reg_job_level" required><option value="">-- Choose --</option></select>
@@ -161,25 +180,6 @@
                     <select id="reg_attendance_nature" required><option value="">-- Choose --</option></select>
                 </div>
 
-                <input type="text" id="staffName" class="hidden-element" placeholder="Your Full Name" required>
-                <input type="text" id="staffNumber" class="hidden-element" placeholder="Staff Number" required>
-                <input type="tel" id="phoneNumber" class="hidden-element" placeholder="Phone Number" required>
-                
-                <select id="sexSelect" class="hidden-element" required>
-                    <option value="">-- Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                </select>
-                
-                <div id="designationFieldWrapper" class="hidden-element">
-                    <select id="designationSelect" required>
-                        <option value="">-- Designation --</option>
-                    </select>
-                    <input type="text" id="otherDesignationInput" placeholder="Specify Designation" class="hidden-element" style="margin-top: 10px;">
-                </div>
-
-                <input type="text" id="specializationInput" class="hidden-element" placeholder="current post" required>
-                
                 <div id="firstLogEntryContainer" class="hidden-element cq-registration-field">
                     <label class="cq-question-text">Title of program</label>
                     <input type="text" id="firstLogTitle" class="cq-answer-input" placeholder="Title" style="margin-bottom:10px;" required>
@@ -192,8 +192,8 @@
                         <input type="time" id="firstLogTime" class="cq-answer-input" style="flex:1;" required>
                     </div>
                 </div>
-                <div class="dynamic-uploads-wrapper" id="dynamicUploadsContainer"></div>
                 <div id="customQuestionsContainer"></div>
+                <div class="dynamic-uploads-wrapper" id="dynamicUploadsContainer"></div>
             </div>
             
             <div class="btn-row hidden-element" id="submitRowContainer">
