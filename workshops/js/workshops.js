@@ -771,7 +771,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         </label>`).join('');
                 } else if (q.question_type === 'multiple_choice_grid' || q.question_type === 'checkbox_grid') {
                     const inputType = q.question_type === 'multiple_choice_grid' ? 'radio' : 'checkbox';
+                    // Wrapped in its own scroll container — a grid question
+                    // with several columns has no other way to stay usable
+                    // on a narrow phone screen; without this the table was
+                    // squeezed down to fit instead of staying readable.
                     fieldHtml = `
+                        <div class="cq-grid-scroll-wrapper">
                         <table class="cq-grid-table">
                             <thead><tr><th></th>${gridCols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
                             <tbody>
@@ -784,7 +789,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                                     </tr>
                                 `).join('')}
                             </tbody>
-                        </table>`;
+                        </table>
+                        </div>`;
                 }
 
                 return `
