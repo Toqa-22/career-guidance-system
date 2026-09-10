@@ -686,6 +686,13 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 if (wrapper) wrapper.classList.toggle('hidden-element', !!isHiddenForThisCourse || !course);
                 select.required = !isHiddenForThisCourse;
 
+                // Temporary diagnostic, pairs with the one in create-course.js
+                // — shows exactly what this course's saved value for this
+                // field actually is, and whether that's being read as
+                // "hidden" or not. Check this in the console (F12) right
+                // after selecting a course whose field was turned off.
+                console.log(`Targeting field "${field.key}" for course ${courseId}:`, { raw: course ? course[field.key] : undefined, savedArr, isHiddenForThisCourse });
+
                 let allowed = field.options;
                 if (course && !isHiddenForThisCourse && !savedArr.includes('All')) {
                     allowed = field.options.filter(o => savedArr.includes(o));
