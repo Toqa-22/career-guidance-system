@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Allocation</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/admin-pages.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<script src="../js/theme-rotator.js"></script>
+<script src="../js/notify.js"></script>
+<script src="../js/idle-timeout.js" data-login-path="../index.html"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="../hub.html">← Hub</a>
+            <a class="admin-nav-link" href="users.html">Users</a>
+            <a class="admin-nav-link" href="logins.html">Login History</a>
+            <a class="admin-nav-link" href="institutions.html">Ibra Department</a>
+            <a class="admin-nav-link" href="halls.html">Halls</a>
+            <a class="admin-nav-link" href="add-institution.html">Add Institution</a>
+            <a class="admin-nav-link" href="fix-institutions.html">Fix Missing Institutions</a>
+            <a class="admin-nav-link active" href="staff-allocation.html">Staff Allocation</a>
+            <a class="admin-nav-link" href="deletion-log.html">Deletion Log</a>
+            <a class="admin-nav-link" href="registration-log.html">Registration Log</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutHubAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+<div class="admin-page-body">
+    <div class="admin-card">
+        <h2 style="color: var(--dynamic-primary-dark, #5B21B6);">Staff Allocation</h2>
+        <p style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
+            Every workshop participant across every activity — the same staff number appears once per
+            activity they've registered for, since a person can be associated with more than one
+            department. Change the institution or department for any one of them below.
+        </p>
+        <div class="admin-form-row" style="margin-bottom: 16px; display:flex; gap:10px; flex-wrap:wrap;">
+            <input type="text" id="staffAllocSearch" placeholder="Search by name, staff number, or department..." style="flex:2; min-width:220px;">
+            <select id="staffAllocInstitutionFilter" style="flex:1; min-width:160px;">
+                <option value="">All Institutions</option>
+                <option value="IBRA">Ibra</option>
+                <option value="OTHER">Health Center</option>
+            </select>
+            <select id="staffAllocDepartmentFilter" style="flex:1; min-width:160px;">
+                <option value="">All Departments</option>
+            </select>
+        </div>
+        <p id="staffAllocEmpty" class="fix-institutions-empty hidden-element">No participants found.</p>
+        <table class="admin-table hidden-element" id="staffAllocTable">
+            <thead>
+                <tr>
+                    <th>Participant Name</th>
+                    <th>Staff Number</th>
+                    <th>Institution</th>
+                    <th>Department</th>
+                    <th>Courses</th>
+                    <th>Change</th>
+                </tr>
+            </thead>
+            <tbody id="staffAllocBody">
+                <tr class="admin-empty-row"><td colspan="6">Loading…</td></tr>
+            </tbody>
+        </table>
+        <div class="pg-controls" id="staffAllocPagination"></div>
+    </div>
+</div>
+
+    </div>
+    </div>
+</div>
+
+<script src="../js/sidebar.js"></script>
+<script type="module" src="../js/staff-allocation.js?v=2"></script>
+
+</body>
+</html>

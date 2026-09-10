@@ -1,0 +1,52 @@
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Manrope', Arial, sans-serif; }
+html { scroll-behavior: smooth; }
+body {
+    min-height: 100vh;
+    background: linear-gradient(150deg, var(--dynamic-primary-deep, #3B0764) 0%, var(--dynamic-primary-dark, #5B21B6) 45%, var(--dynamic-primary, #7C3AED) 100%);
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* ===== Decorative moving circles, same treatment as the sidebar/login ===== */
+.hub-shape { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.1); pointer-events: none; z-index: 0; }
+.hub-shape-1 { width: 260px; height: 260px; top: -80px; left: -70px; animation: hubFloat1 9s ease-in-out infinite; }
+.hub-shape-2 { width: 160px; height: 160px; bottom: 10%; right: -60px; background: rgba(255,255,255,0.08); animation: hubFloat2 7s ease-in-out infinite; }
+.hub-shape-3 { width: 90px; height: 90px; top: 40%; left: 8%; animation: hubFloat3 8s ease-in-out infinite; }
+.hub-shape-4 { width: 130px; height: 130px; bottom: -50px; left: 30%; background: rgba(255,255,255,0.09); animation: hubFloat1 10s ease-in-out infinite reverse; }
+@keyframes hubFloat1 { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(45px, 40px); } }
+@keyframes hubFloat2 { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-40px, -35px); } }
+@keyframes hubFloat3 { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(25px, -30px) scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .hub-shape { animation: none; } }
+
+.hub-header {
+    position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 32px;
+}
+.hub-welcome-text { color: rgba(255,255,255,.9); font-weight: 700; font-size: 14px; }
+.hub-logout-link { color: rgba(255,255,255,.85); text-decoration: none; font-weight: 700; font-size: 13.5px; padding: 8px 16px; border-radius: 10px; transition: background .15s; }
+.hub-logout-link:hover { background: rgba(255,255,255,.15); color: white; }
+.hub-header-actions { display: flex; align-items: center; gap: 6px; }
+
+.hub-main-logo { display: block; margin: 0 auto 20px; object-fit: contain; border-radius: 18px; background: white; padding: 10px; box-shadow: 0 10px 26px rgba(0,0,0,.2); }
+.hub-main-kicker { color: rgba(255,255,255,.85); font-size: 29px; font-weight: 800; margin-bottom: 6px; }
+.hub-main { position: relative; z-index: 2; text-align: center; padding: 60px 20px 100px; }
+.hub-main h1 { color: white; font-size: 29px; font-weight: 800; margin-bottom: 10px; }
+.hub-sub { color: rgba(255,255,255,.8); font-size: 15px; margin-bottom: 48px; }
+
+.hub-cards { display: flex; gap: 26px; justify-content: center; flex-wrap: wrap; max-width: 760px; margin: 0 auto; }
+.hub-card {
+    background: white; border-radius: 24px; padding: 36px 30px; width: 320px; text-decoration: none;
+    box-shadow: 0 20px 50px rgba(0,0,0,.25); transition: transform .2s ease, box-shadow .2s ease;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.hub-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(0,0,0,.32); }
+.hub-card-img { width: 140px; height: 140px; max-width: 140px; max-height: 140px; object-fit: contain; display: block; flex-shrink: 0; margin-bottom: 10px; }
+.hub-card h2 { color: #0f172a; font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+.hub-card p { color: #64748b; font-size: 13.5px; line-height: 1.6; margin-bottom: 20px; min-height: 62px; }
+.hub-card-cta { color: var(--dynamic-primary, #7C3AED); font-weight: 800; font-size: 14px; }
+
+@media (max-width: 640px) {
+    .hub-header { padding: 18px 20px; }
+    .hub-main h1, .hub-main-kicker { font-size: 22px; }
+    .hub-card { width: 100%; max-width: 340px; }
+}

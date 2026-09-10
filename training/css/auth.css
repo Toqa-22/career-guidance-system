@@ -1,0 +1,132 @@
+/* ==========================================================================
+   auth.css
+   أنماط خاصة بصفحة تسجيل الدخول (index.html) فقط — يُحمَّل بعد css/style.css
+   مباشرة (لا يعتمد على css/dashboard.css إطلاقاً بما أن هذه الصفحة مستقلة
+   تماماً عن الشريط العلوي وباقي مكونات لوحة الإدارة).
+   ========================================================================== */
+
+.auth-body{
+  background: linear-gradient(160deg, var(--primary-dark) 0%, var(--primary) 45%, var(--secondary) 100%);
+  min-height: 100vh;
+}
+
+.auth-wrap{
+  min-height: 100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 24px;
+}
+
+.auth-card{
+  width:100%;
+  max-width: 380px;
+  background:#fff;
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  padding: 36px 32px 30px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+
+.auth-logo{
+  width:84px;height:84px;
+  border-radius: 20px;
+  background:#F5F7FA;
+  border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;
+  box-shadow: var(--shadow-sm);
+}
+.auth-logo img{
+  width:70%;height:70%;
+  object-fit:contain;
+}
+
+.auth-card h1{
+  margin:0 0 6px;
+  font-size:20px;
+  font-weight:800;
+  color: var(--text);
+}
+
+.auth-subtitle{
+  margin:0 0 26px;
+  font-size:12.5px;
+  line-height:1.7;
+  color: var(--text-muted);
+  font-weight:600;
+}
+
+.auth-field{
+  width:100%;
+  text-align:right;
+  margin-bottom:16px;
+}
+.auth-field label{
+  display:block;
+  font-size:12.5px;
+  font-weight:700;
+  margin-bottom:6px;
+  color: var(--text);
+}
+.auth-field input{
+  width:100%;
+  padding:12px 14px;
+  border-radius: var(--radius-sm);
+  border:1.5px solid var(--border);
+  font-size:14px;
+  font-family:inherit;
+  background:#FBFCFE;
+}
+.auth-field input:focus{
+  outline:none;
+  border-color: var(--primary);
+  box-shadow:0 0 0 3px var(--primary-light);
+}
+
+.auth-error{
+  display:none;
+  width:100%;
+  color: var(--danger);
+  background: var(--danger-light);
+  border:1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding:9px 12px;
+  font-size:12.5px;
+  font-weight:700;
+  margin: 2px 0 16px;
+  text-align:center;
+}
+.auth-error.show{ display:block; }
+
+.auth-submit{
+  width:100%;
+  padding:13px;
+  border:none;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color:#fff;
+  font-size:14.5px;
+  font-weight:800;
+  font-family:inherit;
+  cursor:pointer;
+  transition: transform var(--transition), background var(--transition);
+}
+.auth-submit:hover{ background: var(--primary-dark); }
+.auth-submit:active{ transform: translateY(1px); }
+.auth-submit[disabled]{ opacity:.7; cursor:not-allowed; }
+
+/* ============ رابط تسجيل الخروج داخل الشريط العلوي بصفحات الإدارة ============ */
+.topbar-nav a.logout-link{
+  background: rgba(220,53,69,0.18);
+  border-color: rgba(220,53,69,0.35);
+}
+.topbar-nav a.logout-link:hover{ background: rgba(220,53,69,0.32); }
+
+@media (max-width:480px){
+  .auth-card{ padding:28px 22px 24px; }
+  .auth-logo{ width:72px; height:72px; }
+}
