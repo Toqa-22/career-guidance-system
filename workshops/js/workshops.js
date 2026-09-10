@@ -715,7 +715,18 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 .eq('course_id', courseId)
                 .order('display_order', { ascending: true });
 
-            if (error || !data || data.length === 0) {
+            if (error) {
+                // Surfaced loudly rather than silently showing nothing —
+                // a real query failure here (bad RLS policy, a missing
+                // column on this database, etc.) previously looked
+                // identical to "this course just has no custom
+                // questions", making it impossible to tell the two apart.
+                console.error('Could not load custom questions for course', courseId, error);
+                box.innerHTML = '';
+                customQuestionsCache = [];
+                return;
+            }
+            if (!data || data.length === 0) {
                 box.innerHTML = '';
                 customQuestionsCache = [];
                 return;
