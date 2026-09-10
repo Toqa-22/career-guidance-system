@@ -301,6 +301,8 @@ input:read-only {
 .cq-choice-label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-dark); margin-bottom: 8px; cursor: pointer; }
 .cq-choice-label input { width: 16px; height: 16px; cursor: pointer; }
 .cq-grid-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.cq-grid-scroll-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
+.cq-grid-scroll-wrapper .cq-grid-table { margin-top: 0; min-width: 420px; }
 .cq-grid-table th, .cq-grid-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border); }
 .cq-grid-row-label { text-align: left !important; font-weight: 600; }
 .cq-grid-table input { cursor: pointer; }
