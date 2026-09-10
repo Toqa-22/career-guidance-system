@@ -1258,6 +1258,15 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
             const targetingSelections = collectTargetingSelections();
             if (!targetingSelections) return;
+            // Temporary diagnostic — shows exactly what's about to be saved
+            // for each of the 8 targeting fields (an empty array [] means
+            // "hidden from registrants"; ["All"] or a list of specific
+            // values means visible). Check this in the browser console
+            // (F12) right after clicking Save to see whether an unchecked
+            // "Show to registrants" toggle is actually producing []  here —
+            // if it is, the bug is downstream (loading/display); if it
+            // isn't, the bug is in this collection step itself.
+            console.log('Targeting selections about to be saved:', targetingSelections);
 
             const theme_color = document.getElementById('courseThemeColor').value || '#7C3AED';
 
