@@ -466,8 +466,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         });
                     } else {
                         allCb.checked = false;
-                        itemCbs.forEach(cb => { if (savedArr.includes(cb.value)) cb.checked = true; });
-                    }
+                        itemCbs.forEach(cb => { if (savedArr.includes(cb.value)) cb.checked = true; });                    }
                 }
                 syncOptionsListVisibility(box);
                 applyFieldVisibilityState(field.key);
@@ -1128,7 +1127,15 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('allocationSectionToggle').checked = hasExistingAllocations;
             document.getElementById('allocationSectionBody').classList.toggle('hidden-element', !hasExistingAllocations);
 
-            const { data: existingQuestions } = await client.from('course_questions').select('*').eq('course_id', editingCourseId).order('display_order', { ascending: true });
+            const { data: existingQuestions, error: questionsLoadErr } = await client.from('course_questions').select('*').eq('course_id', editingCourseId).order('display_order', { ascending: true });
+            if (questionsLoadErr) {
+                // Same reasoning as workshops.js's own version of this
+                // query — a real failure here previously looked identical
+                // to "this course has no custom questions yet", so an
+                // admin editing a course that DOES have some would see
+                // them silently vanish with no indication why.
+                console.error('Could not load existing custom questions for course', editingCourseId, questionsLoadErr);
+            }
             customQuestions = (existingQuestions || []).map(q => ({
                 id: q.id, question_type: q.question_type, question_text: q.question_text,
                 options: Array.isArray(q.options) ? q.options : [],
