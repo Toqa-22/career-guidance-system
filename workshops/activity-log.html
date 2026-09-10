@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+<title>Activity Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/workshops.css">
+<link rel="stylesheet" href="css/notifications.css">
+<script src="js/theme-rotator.js"></script>
+<script src="js/notify.js"></script>
+</head>
+<body class="theme-loading">
+
+<section class="hero">
+    <div class="hero-shape hero-shape-1" aria-hidden="true"></div>
+    <div class="hero-shape hero-shape-2" aria-hidden="true"></div>
+    <div class="hero-shape hero-shape-3" aria-hidden="true"></div>
+    <div class="hero-inner">
+        <div class="brand-icon" aria-hidden="true">
+            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+        </div>
+        <h1 class="hero-title"><span class="hero-title-line">Ibra Hospital</span><br><span class="hero-title-line">Professional Development</span><br><span class="hero-title-line">and Career <span class="accent">Guidance</span></span></h1>
+        <p class="hero-tagline" id="courseNameLine">Enter your staff number to check in.</p>
+    </div>
+</section>
+
+<div class="container">
+    <section id="featuredSection" class="featured hidden-element">
+        <div class="featured-visual" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="40" height="40" fill="none">
+              <circle cx="32" cy="32" r="22" stroke="white" stroke-width="4"/>
+              <path d="M32 20V33L40 38" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <div class="featured-content">
+            <div class="eyebrow">Activity</div>
+            <h2 class="featured-title" id="featuredTitle"></h2>
+            <p class="featured-description" id="featuredDescription"></p>
+            <div class="featured-meta" id="featuredMeta"></div>
+        </div>
+    </section>
+</div>
+
+<div class="simple-page-container">
+
+    <div class="simple-header">
+        <h1>Activity Log</h1>
+    </div>
+
+    <div class="form-card" id="staffCheckCard" style="max-width: 420px; margin: 0 auto;">
+        <label style="font-size:14px; font-weight:bold; color:#334155; display:block; margin-bottom:8px;">Staff Number</label>
+        <input type="text" id="staffNumberInput" placeholder="e.g. 12345" style="margin-bottom:16px;">
+        <button class="btn-register" id="checkBtn" style="width:100%;">Check</button>
+        <p id="checkNote" style="margin-top:16px; font-size:14px; text-align:center;"></p>
+    </div>
+
+    <div class="form-card hidden-element" id="departmentBackfillCard" style="max-width: 560px; margin: 0 auto;">
+        <h3 id="deptBackfillForName" style="margin-bottom:18px;"></h3>
+        <p style="margin-bottom:14px; font-size:13.5px; color:#64748b;">Here's what you've logged so far — please also choose who organized it before continuing.</p>
+        <div id="deptBackfillEntriesBox" style="margin-bottom:22px;"></div>
+        <label style="font-size:13px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Organized By</label>
+        <select id="deptBackfillSelect" required style="margin-bottom:16px;">
+            <option value="">-- Choose Organized By --</option>
+        </select>
+        <button class="btn-register" id="deptBackfillContinueBtn" style="width:100%;">Continue</button>
+        <p id="deptBackfillNote" style="margin-top:14px; font-size:14px; text-align:center;"></p>
+    </div>
+
+    <div class="form-card hidden-element" id="logCard" style="max-width: 560px; margin: 0 auto;">
+        <h3 id="loggedForName" style="margin-bottom:18px;"></h3>
+
+        <div id="existingEntriesBox" style="margin-bottom:22px;"></div>
+
+        <h4 style="margin-bottom:12px; font-size:14px; color:#334155;">Add a new entry</h4>
+        <label style="font-size:13px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Title</label>
+        <input type="text" id="entryTitle" placeholder="e.g. Module 3 review" style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Organized By</label>
+        <select id="entryDept" required style="margin-bottom:16px;">
+            <option value="">-- Choose Organized By --</option>
+        </select>
+        <div style="display:flex; gap:10px; margin-bottom:16px;">
+            <div style="flex:1;">
+                <label style="font-size:13px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Date</label>
+                <input type="date" id="entryDate">
+            </div>
+            <div style="flex:1;">
+                <label style="font-size:13px; font-weight:bold; color:#334155; display:block; margin-bottom:6px;">Time</label>
+                <input type="time" id="entryTime">
+            </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-register" id="addEntryBtn" style="flex:1;">+ Add New</button>
+            <button class="btn-register" id="closeLogBtn" style="flex:none; width:auto; padding:0 22px; background:white; color:#64748b; border:2px solid #e2e8f0;">Close</button>
+        </div>
+        <p id="entryNote" style="margin-top:14px; font-size:14px; text-align:center;"></p>
+    </div>
+
+</div>
+
+<script type="module" src="js/activity-log.js"></script>
+</body>
+</html>
