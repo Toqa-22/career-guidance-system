@@ -848,6 +848,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
         document.getElementById('bookHallToggle').addEventListener('change', (e) => {
             document.getElementById('bookHallFields').classList.toggle('hidden-element', !e.target.checked);
+            syncChDateEntryRequiredness();
         });
 
         // ============================================================
@@ -862,19 +863,38 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             return chDateKey(dt.getFullYear(), dt.getMonth(), dt.getDate());
         }
 
+        // A row's date/time inputs are only actually required while this
+        // whole section is both enabled (bookHallToggle checked) AND in
+        // per-date mode rather than weekly-repeat mode — a required field
+        // sitting inside a hidden container blocks native form validation
+        // entirely (Chrome logs "invalid form control... not focusable"
+        // and silently refuses to submit the form), which is exactly what
+        // was happening on every Save whenever hall booking wasn't in use.
+        function chDateEntryFieldsShouldBeRequired() {
+            return document.getElementById('bookHallToggle').checked
+                && !document.getElementById('chWeeklyRepeatToggle').checked;
+        }
+
+        function syncChDateEntryRequiredness() {
+            const shouldBeRequired = chDateEntryFieldsShouldBeRequired();
+            document.querySelectorAll('#chDatesContainer .ch-entry-date-from, #chDatesContainer .ch-entry-date-to, #chDatesContainer .ch-entry-start, #chDatesContainer .ch-entry-end')
+                .forEach(el => { el.required = shouldBeRequired; });
+        }
+
         function createChDateEntryRow(dateFromValue, dateToValue, startTime, endTime) {
             const row = document.createElement('div');
             row.className = 'hall-date-entry-row';
+            const requiredAttr = chDateEntryFieldsShouldBeRequired() ? 'required' : '';
             row.innerHTML = `
                 <div class="hall-date-entry-dates">
-                    <input type="date" class="ch-entry-date-from" value="${dateFromValue || ''}" required>
+                    <input type="date" class="ch-entry-date-from" value="${dateFromValue || ''}" ${requiredAttr}>
                     <span>to</span>
-                    <input type="date" class="ch-entry-date-to" value="${dateToValue || dateFromValue || ''}" required>
+                    <input type="date" class="ch-entry-date-to" value="${dateToValue || dateFromValue || ''}" ${requiredAttr}>
                 </div>
                 <div class="hall-date-entry-times">
-                    <input type="time" class="ch-entry-start" value="${startTime || ''}" required>
+                    <input type="time" class="ch-entry-start" value="${startTime || ''}" ${requiredAttr}>
                     <span>to</span>
-                    <input type="time" class="ch-entry-end" value="${endTime || ''}" required>
+                    <input type="time" class="ch-entry-end" value="${endTime || ''}" ${requiredAttr}>
                     <button type="button" class="hall-date-entry-remove-btn">Remove</button>
                 </div>
             `;
@@ -909,6 +929,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('chWeeklyHint').style.display = isWeekly ? 'block' : 'none';
             document.getElementById('chDatesContainer').classList.toggle('hidden-element', isWeekly);
             document.getElementById('chAddDateBtn').classList.toggle('hidden-element', isWeekly);
+            syncChDateEntryRequiredness();
         });
 
         // Same shape as collectChDateEntries() below — everything
@@ -1213,6 +1234,13 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                             return;
                         }
                         exampleUrl = client.storage.from('course-images').getPublicUrl(fileName).data.publicUrl;
+                        // Marks this upload as done on the row itself — without
+                        // this, saving again on the same page (now possible
+                        // without a reload after an edit) would re-upload the
+                        // exact same file every time, leaving behind a new
+                        // duplicate in storage on each save.
+                        row.dataset.existingUrl = exampleUrl;
+                        row.pendingExampleFile = null;
                     }
 
                     file_labels.push(labelVal);
@@ -1236,6 +1264,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     return;
                 }
                 image_url = client.storage.from('course-images').getPublicUrl(fileName).data.publicUrl;
+                // Same reasoning as the document reference images above —
+                // without this, saving again on the same page re-uploads
+                // the same poster image every time.
+                existingCourseImageUrl = image_url;
+                pendingCourseImageFile = null;
             }
 
             if (editingCourseId) {
@@ -1254,7 +1287,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 await bookHallIfRequested(name);
 
                 alert("Course configurations updated successfully.");
-                setTimeout(exitEditOperationalMode, 1200);
+                // Stays on this page rather than auto-navigating back to
+                // the dashboard — an admin fine-tuning a course often wants
+                // to make another small change and save again right away,
+                // not re-open Edit from the dashboard every single time.
+                // "Cancel" (exitEditOperationalMode) is still there for
+                // when they're actually done.
             } else {
                 const { data: newCourse, error: insErr } = await client.from('courses').insert({
                     name, course_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
