@@ -1287,12 +1287,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 await bookHallIfRequested(name);
 
                 alert("Course configurations updated successfully.");
-                // Stays on this page rather than auto-navigating back to
-                // the dashboard — an admin fine-tuning a course often wants
-                // to make another small change and save again right away,
-                // not re-open Edit from the dashboard every single time.
-                // "Cancel" (exitEditOperationalMode) is still there for
-                // when they're actually done.
+                setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
             } else {
                 const { data: newCourse, error: insErr } = await client.from('courses').insert({
                     name, course_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
@@ -1307,8 +1302,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 await pushCustomQuestions(newCourse.id);
                 await bookHallIfRequested(name);
                 alert("New managed course added successfully.");
-                
-                document.getElementById('courseDate').value = '';
+                setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
             }
         }
 
