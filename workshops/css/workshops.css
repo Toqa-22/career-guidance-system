@@ -294,9 +294,11 @@ input:read-only {
 .dynamic-uploads-wrapper { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
 
 .cq-section-heading {
-    grid-column: 1 / -1; margin-top: 22px; margin-bottom: -4px;
-    font-size: 15px; font-weight: 800; color: var(--course-theme-dark, var(--text-dark));
-    display: flex; align-items: center; gap: 8px;
+    grid-column: 1 / -1; margin-top: 26px; margin-bottom: 4px;
+    display: inline-flex; align-self: flex-start; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+    color: #fff; padding: 7px 16px; border-radius: 999px;
+    background: linear-gradient(120deg, var(--course-theme-dark, #5B21B6), var(--course-theme, #7C3AED));
 }
 /* customQuestionsContainer is a DIRECT child of .form-grid (a CSS grid),
    so it needs its own column-span — grid-column on .cq-registration-field
@@ -304,12 +306,20 @@ input:read-only {
    direct grid item. Without this, the whole custom-questions block was
    sized as a single auto-fit column (300ish px) on a wide screen instead
    of spanning the full width like every other section on this page. */
-#customQuestionsContainer { grid-column: 1 / -1; display: flex; flex-direction: column; }
+#customQuestionsContainer { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+/* A distinct look from every other plain field on this page — white card,
+   real elevation, and a bold gradient top edge instead of a pale tint that
+   just blended into the rest of the form. */
 .cq-registration-field {
-    grid-column: 1 / -1; margin-top: 16px;
-    background: var(--course-theme-light, var(--background)); border: 1.5px solid var(--course-theme, var(--border));
-    border-left: 4px solid var(--course-theme, var(--border));
-    border-radius: 14px; padding: 16px 18px;
+    grid-column: 1 / -1; margin-top: 0;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 16px; padding: 18px 20px 20px;
+    box-shadow: 0 6px 18px rgba(17, 24, 39, 0.08);
+    position: relative; overflow: hidden;
+}
+.cq-registration-field::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+    background: linear-gradient(90deg, var(--course-theme-dark, #5B21B6), var(--course-theme, #7C3AED), var(--course-theme-light, #C4B5FD));
 }
 /* Text/Date/Time/List answers sit on the SAME line as their question —
    label on the left, answer on the right — since a single input doesn't
@@ -323,16 +333,17 @@ input:read-only {
 .cq-inline-field .cq-question-text { margin-bottom: 0; flex: 1 1 auto; min-width: 160px; }
 .cq-inline-field input.cq-answer-input, .cq-inline-field select.cq-answer-input { flex: 1 1 220px; width: auto; min-width: 180px; }
 .cq-question-text {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 14px; font-weight: 700; color: var(--text-dark); margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 14.5px; font-weight: 800; color: var(--text-dark); margin-bottom: 14px;
 }
 .cq-question-number {
-    flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
-    background: var(--course-theme, #7C3AED); color: #fff;
-    font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--course-theme, #7C3AED), var(--course-theme-dark, #5B21B6)); color: #fff;
+    font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
 }
 .cq-registration-field input.cq-answer-input, .cq-registration-field select.cq-answer-input {
-    width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; font-family: inherit;
+    width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 12px; font-size: 14px; font-family: inherit;
     background: var(--background);
 }
 .cq-choice-label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-dark); margin-bottom: 8px; cursor: pointer; }
