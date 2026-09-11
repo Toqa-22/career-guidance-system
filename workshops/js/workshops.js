@@ -686,13 +686,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 if (wrapper) wrapper.classList.toggle('hidden-element', !!isHiddenForThisCourse || !course);
                 select.required = !isHiddenForThisCourse;
 
-                // Temporary diagnostic, pairs with the one in create-course.js
-                // — shows exactly what this course's saved value for this
-                // field actually is, and whether that's being read as
-                // "hidden" or not. Check this in the console (F12) right
-                // after selecting a course whose field was turned off.
-                console.log(`Targeting field "${field.key}" for course ${courseId}:`, JSON.stringify({ raw: course ? course[field.key] : undefined, savedArr, isHiddenForThisCourse }));
-
                 let allowed = field.options;
                 if (course && !isHiddenForThisCourse && !savedArr.includes('All')) {
                     allowed = field.options.filter(o => savedArr.includes(o));
@@ -903,7 +896,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             updateDesignationOptionsForCourse(courseId);
             updateGenderOptionsForCourse(courseId);
             updateInstitutionTypeOptionsForCourse(courseId);
-            updateTargetingSelectOptionsForCourse(courseId);
             renderInstitutionFields();
             renderCustomQuestionsForRegistration(courseId);
 
@@ -920,6 +912,15 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('certNameAgreement').checked = false;
 
             toggleFormVisibility(true);
+            // Runs AFTER toggleFormVisibility(true) on purpose — that call
+            // unconditionally un-hides every element in REST_OF_FORM_IDS,
+            // which includes all 8 regFieldWrapper_* targeting fields. Since
+            // this decides per-field whether "Show to registrants" is
+            // actually off for THIS course, it has to run last, or its
+            // hide decision gets silently overwritten the instant
+            // toggleFormVisibility reveals the rest of the form — which is
+            // exactly why turning a field off never had any visible effect.
+            updateTargetingSelectOptionsForCourse(courseId);
             // Load the matched participant's saved info now that the
             // course-specific institution/designation dropdowns above are
             // ready to accept it — a brand-new (unmatched) staff number
