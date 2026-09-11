@@ -691,7 +691,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 // field actually is, and whether that's being read as
                 // "hidden" or not. Check this in the console (F12) right
                 // after selecting a course whose field was turned off.
-                console.log(`Targeting field "${field.key}" for course ${courseId}:`, { raw: course ? course[field.key] : undefined, savedArr, isHiddenForThisCourse });
+                console.log(`Targeting field "${field.key}" for course ${courseId}:`, JSON.stringify({ raw: course ? course[field.key] : undefined, savedArr, isHiddenForThisCourse }));
 
                 let allowed = field.options;
                 if (course && !isHiddenForThisCourse && !savedArr.includes('All')) {
