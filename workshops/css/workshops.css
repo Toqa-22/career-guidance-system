@@ -363,7 +363,7 @@ input:read-only {
     .cq-inline-field input.cq-answer-input, .cq-inline-field select.cq-answer-input { width: 100%; }
 }
 .cq-grid-table th {
-    color: #fff; font-weight: 800; background: var(--course-theme, #7C3AED);
+    color: var(--course-theme-dark, var(--text-dark)); font-weight: 800; background: var(--course-theme-light, #EDE9FE);
 }
 .cq-grid-table th, .cq-grid-table td {
     padding: 10px 8px; text-align: center; border: 1.5px solid var(--course-theme-light, var(--border));
