@@ -1266,7 +1266,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // "Show to registrants" toggle is actually producing []  here —
             // if it is, the bug is downstream (loading/display); if it
             // isn't, the bug is in this collection step itself.
-            console.log('Targeting selections about to be saved:', targetingSelections);
+            console.log('Targeting selections about to be saved:', JSON.stringify(targetingSelections));
 
             const theme_color = document.getElementById('courseThemeColor').value || '#7C3AED';
 
@@ -1442,6 +1442,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         }
 
         async function pushAllocationRecords(courseId) {
+            // If the master toggle is off, this course has NO institution
+            // restrictions — push nothing, regardless of what individual
+            // checkboxes underneath it still show checked. Without this,
+            // turning the toggle off (hiding the section) never actually
+            // cleared anything: the checkboxes stayed checked in the
+            // hidden DOM, and got re-saved as if the toggle were still on.
+            if (!document.getElementById('allocationSectionToggle').checked) return;
+
             const allocationRows = [];
             const checkboxes = document.querySelectorAll('.inst-checkbox-target');
             
@@ -1565,6 +1573,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         
         document.getElementById('allocationSectionToggle').addEventListener('change', (e) => {
             document.getElementById('allocationSectionBody').classList.toggle('hidden-element', !e.target.checked);
+            if (!e.target.checked) {
+                // Clears the selections themselves, not just hiding them —
+                // otherwise re-enabling this later in the same session
+                // would show stale checked institutions from before, and
+                // saving while it's off (handled in pushAllocationRecords)
+                // already means none of this gets persisted anyway.
+                document.querySelectorAll('.inst-checkbox-target').forEach(cb => { cb.checked = false; });
+            }
         });
 
         (async function init() {
