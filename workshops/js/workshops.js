@@ -1244,12 +1244,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     document.getElementById('featuredTitle').textContent = closedDirectCourse.name;
                     document.getElementById('featuredDescription').textContent = registrationStatusMessage(closedDirectCourse);
                     document.getElementById('featuredMeta').innerHTML = `<span>📅 ${closedDirectCourse.course_date}</span>`;
-                    const cta = document.getElementById('featuredCta');
-                    const now = new Date();
-                    const notYetOpen = closedDirectCourse.registration_opens_date && now < new Date(closedDirectCourse.registration_opens_date + 'T00:00:00');
-                    cta.textContent = notYetOpen ? 'Registration Not Open Yet' : 'Registration Closed';
-                    cta.disabled = true;
-                    cta.onclick = null;
                     section.classList.remove('hidden-element');
                     // Nothing to register for on a closed/not-yet-open course
                     // linked directly — hide the whole "Register for a
@@ -1295,10 +1289,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             metaParts.push(`<span>🪑 ${featured.unlimited_seats ? 'Unlimited' : featured.seats} available</span>`);
             document.getElementById('featuredMeta').innerHTML = metaParts.join('');
 
-            const cta = document.getElementById('featuredCta');
-            cta.disabled = false;
-            cta.textContent = 'View & Register →';
-            cta.onclick = () => window.selectCourseAndScroll(featured.id);
             section.classList.remove('hidden-element');
         }
 
