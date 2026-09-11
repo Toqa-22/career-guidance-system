@@ -847,8 +847,15 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         </div>`;
                 }
 
+                // Text/Date/Time/List answers sit inline with their
+                // question (one row); Multiple Choice, Checkbox, and both
+                // grid types keep the stacked layout — several radio/
+                // checkbox options or a full table read badly crammed
+                // onto a single line the way one plain input doesn't.
+                const isInlineType = ['text', 'date', 'time', 'list'].includes(q.question_type);
+
                 return `
-                    <div class="cq-registration-field">
+                    <div class="cq-registration-field${isInlineType ? ' cq-inline-field' : ''}">
                         <label class="cq-question-text"><span class="cq-question-number">${index + 1}</span>${q.question_text}</label>
                         ${fieldHtml}
                     </div>
