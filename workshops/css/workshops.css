@@ -363,12 +363,12 @@ input:read-only {
     .cq-inline-field input.cq-answer-input, .cq-inline-field select.cq-answer-input { width: 100%; }
 }
 .cq-grid-table th {
-    color: #fff; font-weight: 800; background: var(--course-theme-dark, #5B21B6);
+    color: #fff; font-weight: 800; background: var(--course-theme, #7C3AED);
 }
 .cq-grid-table th, .cq-grid-table td {
-    padding: 10px 8px; text-align: center; border: 1.5px solid var(--course-theme, var(--border));
+    padding: 10px 8px; text-align: center; border: 1.5px solid var(--course-theme-light, var(--border));
 }
-.cq-grid-row-label { text-align: left !important; font-weight: 800; background: var(--course-theme-light, var(--background)); }
+.cq-grid-row-label { text-align: center !important; font-weight: 800; background: var(--course-theme-light, var(--background)); }
 .cq-grid-table td { font-weight: 700; }
 .cq-grid-table input { cursor: pointer; accent-color: var(--course-theme, #7C3AED); }
 .single-upload-box { background: var(--background); border: 2px dashed var(--border); padding: 20px; border-radius: 15px; display: flex; flex-direction: column; gap: 10px; }
