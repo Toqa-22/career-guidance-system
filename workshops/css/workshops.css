@@ -298,12 +298,30 @@ input:read-only {
     font-size: 15px; font-weight: 800; color: var(--course-theme-dark, var(--text-dark));
     display: flex; align-items: center; gap: 8px;
 }
+/* customQuestionsContainer is a DIRECT child of .form-grid (a CSS grid),
+   so it needs its own column-span — grid-column on .cq-registration-field
+   below has no effect on the grid at all, since that's a GRANDCHILD, not a
+   direct grid item. Without this, the whole custom-questions block was
+   sized as a single auto-fit column (300ish px) on a wide screen instead
+   of spanning the full width like every other section on this page. */
+#customQuestionsContainer { grid-column: 1 / -1; display: flex; flex-direction: column; }
 .cq-registration-field {
     grid-column: 1 / -1; margin-top: 16px;
     background: var(--course-theme-light, var(--background)); border: 1.5px solid var(--course-theme, var(--border));
     border-left: 4px solid var(--course-theme, var(--border));
     border-radius: 14px; padding: 16px 18px;
 }
+/* Text/Date/Time/List answers sit on the SAME line as their question —
+   label on the left, answer on the right — since a single input doesn't
+   need its own row. Multiple Choice, Checkbox, and the two grid types
+   keep the stacked layout (label above, options/table below): several
+   radio/checkbox options or a full table read far worse crammed onto one
+   line than a single text/date/time/dropdown answer does. */
+.cq-registration-field.cq-inline-field {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.cq-inline-field .cq-question-text { margin-bottom: 0; flex: 1 1 auto; min-width: 160px; }
+.cq-inline-field input.cq-answer-input, .cq-inline-field select.cq-answer-input { flex: 1 1 220px; width: auto; min-width: 180px; }
 .cq-question-text {
     display: flex; align-items: center; gap: 10px;
     font-size: 14px; font-weight: 700; color: var(--text-dark); margin-bottom: 12px;
@@ -330,10 +348,17 @@ input:read-only {
    cell unreadably, does it get a floor width and scroll sideways instead. */
 @media (max-width: 640px) {
     .cq-grid-scroll-wrapper .cq-grid-table { min-width: 420px; }
+    .cq-inline-field { flex-direction: column; align-items: stretch; }
+    .cq-inline-field input.cq-answer-input, .cq-inline-field select.cq-answer-input { width: 100%; }
 }
-.cq-grid-table th { color: var(--course-theme-dark, var(--text-dark)); font-weight: 700; }
-.cq-grid-table th, .cq-grid-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border); }
-.cq-grid-row-label { text-align: left !important; font-weight: 600; }
+.cq-grid-table th {
+    color: #fff; font-weight: 800; background: var(--course-theme-dark, #5B21B6);
+}
+.cq-grid-table th, .cq-grid-table td {
+    padding: 10px 8px; text-align: center; border: 1.5px solid var(--course-theme, var(--border));
+}
+.cq-grid-row-label { text-align: left !important; font-weight: 800; background: var(--course-theme-light, var(--background)); }
+.cq-grid-table td { font-weight: 700; }
 .cq-grid-table input { cursor: pointer; accent-color: var(--course-theme, #7C3AED); }
 .single-upload-box { background: var(--background); border: 2px dashed var(--border); padding: 20px; border-radius: 15px; display: flex; flex-direction: column; gap: 10px; }
 .single-upload-box label { font-size: 14px; color: var(--text-dark); font-weight: 700; }
