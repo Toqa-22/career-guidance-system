@@ -266,6 +266,62 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('closeAlreadyRegisteredBtn').classList.toggle('hidden-element', !show);
         }
 
+        function setNotEligibleNotice(message) {
+            const box = document.getElementById('notEligibleNotice');
+            box.textContent = message || '';
+            box.classList.toggle('hidden-element', !message);
+            document.getElementById('closeNotEligibleBtn').classList.toggle('hidden-element', !message);
+        }
+
+        // Checks a RETURNING participant's own saved profile against this
+        // course's eligibility rules — a brand-new (unmatched) staff number
+        // has nothing saved to conflict with yet, so this only ever runs
+        // for a match. Course-specific answers (the 8 targeting fields,
+        // designation, institution) are only a real restriction when the
+        // course actually narrows them — an untouched "All"/empty value
+        // means anyone qualifies, so those are skipped rather than flagged.
+        function getEligibilityBlockReason(participant, course, courseId) {
+            if (course.allowed_sex === 'Male' && participant.sex && participant.sex !== 'Male') {
+                return 'This activity is open to Male participants only, and your saved profile has you as Female.';
+            }
+            if (course.allowed_sex === 'Female' && participant.sex && participant.sex !== 'Female') {
+                return 'This activity is open to Female participants only, and your saved profile has you as Male.';
+            }
+
+            if (course.allowed_designations) {
+                let list;
+                try {
+                    list = Array.isArray(course.allowed_designations) ? course.allowed_designations : JSON.parse(course.allowed_designations);
+                } catch (e) { list = null; }
+                if (Array.isArray(list) && list.length > 0 && !list.includes('All') && participant.designation_category && !list.includes(participant.designation_category)) {
+                    return `This activity is limited to specific designations, and your saved designation (${participant.designation_category}) isn't one of them.`;
+                }
+            }
+
+            const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
+            if (mappingsForCourse.length > 0 && participant.institution_id) {
+                const isAllowed = mappingsForCourse.some(m => m.institution_id === participant.institution_id);
+                if (!isAllowed) {
+                    return 'This activity is limited to specific institutions/departments, and your saved institution isn\'t one of them.';
+                }
+            }
+
+            for (const field of TARGETING_FIELDS) {
+                let list;
+                try {
+                    const raw = course[field.key];
+                    list = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim() !== '' ? JSON.parse(raw) : []);
+                } catch (e) { list = []; }
+                if (list.length === 0 || list.includes('All')) continue;
+                const participantValue = participant[field.key];
+                if (participantValue && !list.includes(participantValue)) {
+                    return `This activity requires a specific ${field.label}, and your saved ${field.label} (${participantValue}) doesn't match.`;
+                }
+            }
+
+            return null;
+        }
+
         function resetStaffGate() {
             matchedParticipant = null;
             enteredStaffNumberRaw = '';
@@ -275,6 +331,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('staffGateWrapper').classList.remove('hidden-element');
             document.getElementById('courseSelectWrapper').classList.add('hidden-element');
             setAlreadyRegisteredNoticeVisible(false);
+            setNotEligibleNotice(null);
             // A direct activity link locks the dropdown to one course (see
             // applyDirectCourseLinkFromUrl) — that choice isn't the
             // participant's to change, so it's left alone here; only the
@@ -733,7 +790,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
             customQuestionsCache = data;
 
-            box.innerHTML = data.map(q => {
+            box.innerHTML = `
+                <div class="cq-section-heading">
+                    Additional Questions
+                </div>
+            ` + data.map((q, index) => {
                 const options = Array.isArray(q.options) ? q.options : [];
                 const gridRows = Array.isArray(q.grid_rows) ? q.grid_rows : [];
                 const gridCols = Array.isArray(q.grid_columns) ? q.grid_columns : [];
@@ -788,7 +849,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
                 return `
                     <div class="cq-registration-field">
-                        <label class="cq-question-text">${q.question_text}</label>
+                        <label class="cq-question-text"><span class="cq-question-number">${index + 1}</span>${q.question_text}</label>
                         ${fieldHtml}
                     </div>
                 `;
@@ -841,6 +902,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             document.getElementById('courseClosedNotice').classList.toggle('hidden-element', !isClosed);
             document.getElementById('closeClosedNoticeBtn').classList.toggle('hidden-element', !isClosed);
             setAlreadyRegisteredNoticeVisible(false);
+            setNotEligibleNotice(null);
 
             if (isClosed) {
                 // These three aren't part of REST_OF_FORM_IDS (toggled by
@@ -888,6 +950,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         course_name: selectedCourse ? selectedCourse.name : null
                     });
                     setAlreadyRegisteredNoticeVisible(true);
+                    toggleFormVisibility(false);
+                    return;
+                }
+
+                // Their own saved profile might rule them out of THIS
+                // specific course even though they're not already
+                // registered for it — e.g. a course open to Female
+                // participants only, and this staff number's saved sex is
+                // Male. A brand-new (unmatched) staff number has nothing
+                // saved to conflict with, so this only ever applies here.
+                const blockReason = getEligibilityBlockReason(matchedParticipant, selectedCourse, courseId);
+                if (blockReason) {
+                    setNotEligibleNotice(blockReason);
                     toggleFormVisibility(false);
                     return;
                 }
@@ -1751,6 +1826,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         });
 
         document.getElementById('closeAlreadyRegisteredBtn').addEventListener('click', () => {
+            window.close();
+            document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
+        });
+
+        document.getElementById('closeNotEligibleBtn').addEventListener('click', () => {
             window.close();
             document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
         });
