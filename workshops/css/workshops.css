@@ -302,7 +302,16 @@ input:read-only {
 .cq-choice-label input { width: 16px; height: 16px; cursor: pointer; }
 .cq-grid-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
 .cq-grid-scroll-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
-.cq-grid-scroll-wrapper .cq-grid-table { margin-top: 0; min-width: 420px; }
+.cq-grid-scroll-wrapper .cq-grid-table { margin-top: 0; }
+/* The forced min-width only kicks in below the same breakpoint the rest of
+   this page collapses to a single column at — on a laptop/desktop there's
+   plenty of room for the table to just fill the available width like any
+   other field, with no artificial scrolling. Only on a narrow phone,
+   where a multi-column grid genuinely can't fit without squeezing every
+   cell unreadably, does it get a floor width and scroll sideways instead. */
+@media (max-width: 640px) {
+    .cq-grid-scroll-wrapper .cq-grid-table { min-width: 420px; }
+}
 .cq-grid-table th, .cq-grid-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border); }
 .cq-grid-row-label { text-align: left !important; font-weight: 600; }
 .cq-grid-table input { cursor: pointer; }
