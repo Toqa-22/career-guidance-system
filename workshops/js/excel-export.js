@@ -38,8 +38,13 @@ function excelTodayStamp() {
     return `${d.getFullYear()}-${month}-${day}`;
 }
 
-// headers: string[]
-// rows: array of arrays (same column order as headers)
+// headers: string[], OR an array of header ROWS (string[][]) for a
+//   multi-row header — e.g. [['#', 'Name', 'Attended', '', '', ''],
+//   ['', '', 'Title', 'Date', 'Time', 'Dept']] paired with headerMerges
+//   below to actually join the group-label cells across rows/columns.
+//   A flat string[] (the common case) is treated as a single header row —
+//   fully backward compatible with every existing caller.
+// rows: array of arrays (same column order as the LAST header row)
 // filenameBase: file name without extension or date (the date is added automatically)
 // sheetName: worksheet tab name
 // textColumnIndexes: column indexes that must stay plain text (phone numbers,
@@ -49,19 +54,34 @@ function excelTodayStamp() {
 //   style regardless) — e.g. forcing a numeric "#" column left instead of
 //   Excel's default right-alignment for numbers, or wrapping a cell that
 //   holds several lines of text.
-function exportStyledExcel(headers, rows, filenameBase, sheetName, textColumnIndexes = [], columnAlignments = {}) {
+// headerMerges: optional array of SheetJS merge ranges (e.g.
+//   [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }] to vertically merge a
+//   single-row column header across both header rows, or
+//   { s: { r: 0, c: 8 }, e: { r: 0, c: 11 } } to horizontally merge a
+//   group label like "Attended" across its four sub-columns).
+function exportStyledExcel(headers, rows, filenameBase, sheetName, textColumnIndexes = [], columnAlignments = {}, headerMerges = []) {
     if (!rows || rows.length === 0) {
         alert('No records found to export.');
         return false;
     }
 
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const headerRows = Array.isArray(headers[0]) ? headers : [headers];
+    const headerRowCount = headerRows.length;
+    const lastHeaderRow = headerRows[headerRowCount - 1];
+
+    const worksheet = XLSX.utils.aoa_to_sheet([...headerRows, ...rows]);
     const range = XLSX.utils.decode_range(worksheet['!ref']);
 
-    // Auto-size every column to fit its longest piece of content (header
-    // included), with extra breathing room so text never feels cramped.
-    worksheet['!cols'] = headers.map((header, colIndex) => {
-        let maxLen = String(header).length;
+    if (headerMerges.length > 0) worksheet['!merges'] = headerMerges;
+
+    // Auto-size every column to fit its longest piece of content, checking
+    // every header row (not just one) plus every data row.
+    worksheet['!cols'] = lastHeaderRow.map((_, colIndex) => {
+        let maxLen = 0;
+        headerRows.forEach(hRow => {
+            const len = String(hRow[colIndex] ?? '').length;
+            if (len > maxLen) maxLen = len;
+        });
         rows.forEach(row => {
             const len = String(row[colIndex] ?? '').length;
             if (len > maxLen) maxLen = len;
@@ -74,26 +94,34 @@ function exportStyledExcel(headers, rows, filenameBase, sheetName, textColumnInd
     // lines (see columnAlignments), so wrapped text isn't visually clipped
     // by a fixed single-line row height.
     const wrapTextColumns = Object.keys(columnAlignments).filter(c => columnAlignments[c].wrapText).map(Number);
-    worksheet['!rows'] = [{ hpt: 24 }, ...rows.map(row => {
-        let maxLines = 1;
-        wrapTextColumns.forEach(colIndex => {
-            const lines = String(row[colIndex] ?? '').split('\n').length;
-            if (lines > maxLines) maxLines = lines;
-        });
-        return { hpt: 21 * maxLines };
-    })];
+    worksheet['!rows'] = [
+        ...headerRows.map(() => ({ hpt: 24 })),
+        ...rows.map(row => {
+            let maxLines = 1;
+            wrapTextColumns.forEach(colIndex => {
+                const lines = String(row[colIndex] ?? '').split('\n').length;
+                if (lines > maxLines) maxLines = lines;
+            });
+            return { hpt: 21 * maxLines };
+        })
+    ];
 
-    // Style the header row: bold dark-gray text on a light gray fill, centered.
-    for (let col = range.s.c; col <= range.e.c; col++) {
-        const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
-        if (worksheet[cellRef]) worksheet[cellRef].s = EXCEL_HEADER_STYLE;
+    // Style every header row/cell: bold dark-gray text on a light gray
+    // fill, centered — including cells left blank for a merge, so the
+    // merged group label's fill/border reads as one solid block.
+    for (let row = 0; row < headerRowCount; row++) {
+        for (let col = range.s.c; col <= range.e.c; col++) {
+            const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+            if (!worksheet[cellRef]) worksheet[cellRef] = { t: 's', v: '' };
+            worksheet[cellRef].s = EXCEL_HEADER_STYLE;
+        }
     }
 
     // Border every data cell so the table reads as one bounded block rather
     // than blending into Excel's default infinite gridlines. Any column-
     // specific alignment/wrapText override (columnAlignments) is merged in
     // per cell here.
-    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+    for (let row = headerRowCount; row <= range.e.r; row++) {
         for (let col = range.s.c; col <= range.e.c; col++) {
             const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
             if (worksheet[cellRef]) {
@@ -129,7 +157,7 @@ function exportStyledExcel(headers, rows, filenameBase, sheetName, textColumnInd
 
     // Force the text-only columns to stay as strings.
     textColumnIndexes.forEach(colIndex => {
-        for (let row = range.s.r + 1; row <= range.e.r; row++) {
+        for (let row = headerRowCount; row <= range.e.r; row++) {
             const cellRef = XLSX.utils.encode_cell({ r: row, c: colIndex });
             if (worksheet[cellRef]) worksheet[cellRef].t = 's';
         }
