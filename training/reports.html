@@ -157,7 +157,7 @@
          ========================================================================== -->
     <div class="period-report-panel">
       <h3>📅 اختيار الفترة</h3>
-      <p class="filters-hint">تُطبَّق هذه الفترة على التقارير الثلاثة أدناه معاً حسب تاريخ بداية تدريب كل متدرب. اتركها فارغة لعرض كل الفترات.</p>
+      <p class="filters-hint">تُطبَّق هذه الفترة على التقارير الأربعة أدناه معاً حسب تاريخ بداية تدريب كل متدرب. اتركها فارغة لعرض كل الفترات.</p>
       <div class="period-report-fields">
         <div class="f-field">
           <label>من تاريخ</label>
@@ -167,6 +167,17 @@
           <label>إلى تاريخ</label>
           <input type="date" id="repTo">
         </div>
+      </div>
+
+      <!-- فلتر المرحلة الدراسية: اختيار واحد أو أكثر أو الكل — لا تحديد
+           إطلاقاً (كل الصناديق فارغة) يعني عرض كل المراحل، بنفس منطق حقلي
+           الفترة أعلاه تماماً. "أخرى" هنا تعني أي قيمة مخصّصة كُتبت يدوياً
+           في نموذج التسجيل (ليست بالضرورة النص الحرفي "أخرى"). -->
+      <p class="filters-hint" style="margin-top:16px;">فلترة اختيارية حسب المرحلة الدراسية — اختر واحدة أو أكثر، أو اتركها كلها بلا تحديد لعرض الجميع.</p>
+      <div class="stage-filter-fields">
+        <label class="stage-filter-checkbox"><input type="checkbox" id="repStageStudent" value="طالب"> طالب</label>
+        <label class="stage-filter-checkbox"><input type="checkbox" id="repStageGraduate" value="خريج"> خريج</label>
+        <label class="stage-filter-checkbox"><input type="checkbox" id="repStageOther" value="أخرى"> أخرى</label>
       </div>
     </div>
 
