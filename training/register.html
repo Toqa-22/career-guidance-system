@@ -239,14 +239,18 @@
             </div>
 
             <!-- حقل المرحلة الدراسية: إلزامي، يُحفظ مع كل سجل قسم يُنشأ لهذا
-                 الطالب — يُميّز هل المتدرب طالب حالياً أم خريج بالفعل. -->
+                 الطالب — يُميّز هل المتدرب طالب حالياً أم خريج بالفعل.
+                 خيار "أخرى" يُظهر حقل نص حر لكتابة مرحلة مخصّصة عند اختياره،
+                 بنفس نمط bindNationalityToggle أعلاه تماماً. -->
             <div class="field" data-field="academic_stage">
               <label>المرحلة الدراسية <span class="req">*</span></label>
               <select id="academic_stage">
                 <option value="">اختر</option>
                 <option value="طالب">طالب</option>
                 <option value="خريج">خريج</option>
+                <option value="أخرى">أخرى</option>
               </select>
+              <input type="text" id="academic_stage_other" placeholder="اكتب المرحلة الدراسية" autocomplete="off" style="display:none; margin-top:8px;">
               <div class="error-msg">يرجى اختيار المرحلة الدراسية</div>
             </div>
 
