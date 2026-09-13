@@ -553,18 +553,45 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 }
             }
 
-            const headers = ['#', 'Phone Number', 'Participant Name', 'Staff Number', 'Gender', 'Institution Origin', 'Activity Name', 'Registration Time', 'Attended', 'Answers'];
+            const staticHeaders = ['#', 'Phone Number', 'Participant Name', 'Staff Number', 'Gender', 'Institution Origin', 'Activity Name', 'Registration Time'];
+            // Same order as the registration form itself and the
+            // participants table — pairs each display label with its
+            // registrations._snapshot column, since that's what's actually
+            // stored per-registration (not the live/current profile value).
+            const targetingFieldColumns = [
+                { label: 'Job Level', snapshotKey: 'job_level_snapshot' },
+                { label: 'Nationality', snapshotKey: 'nationality_snapshot' },
+                { label: 'Highest Educational Qualification', snapshotKey: 'education_qualification_snapshot' },
+                { label: 'Experience Years', snapshotKey: 'experience_years_snapshot' },
+                { label: 'Organization', snapshotKey: 'organization_snapshot' },
+                { label: 'Directorate', snapshotKey: 'directorate_snapshot' },
+                { label: 'Type of Program', snapshotKey: 'program_type_snapshot' },
+                { label: 'Nature of Attendance', snapshotKey: 'attendance_nature_snapshot' }
+            ];
+            const attendedSubColumnCount = 4; // Title, Date, Time, Dept
+
             const rows = allData.map((r, i) => {
                 const isAttendanceRequired = r.attendance_required !== false;
-                let attendedValue;
+                let attendedCells;
                 if (isAttendanceRequired) {
-                    attendedValue = r.attended ? 'Yes' : 'No';
+                    // No session title/date/time/department exists for an
+                    // attendance-required course — the Yes/No answer itself
+                    // goes under "Title" rather than leaving all four
+                    // sub-columns blank with no indication either way.
+                    attendedCells = [r.attended ? 'Yes' : 'No', '', '', ''];
                 } else {
                     const dept = (r.institution_name_snapshot || '').replace('Ibra - ', '') || '—';
                     const entries = logEntriesByReg.get(r.id) || [];
-                    attendedValue = entries.length > 0
-                        ? entries.map(e => `${e.title} | ${formatDateDDMMYYYY(e.entry_date)} | ${formatEntryTime(e.entry_time)} | ${dept}`).join('\n')
-                        : 'No sessions logged yet';
+                    if (entries.length > 0) {
+                        attendedCells = [
+                            entries.map(e => e.title).join('\n'),
+                            entries.map(e => formatDateDDMMYYYY(e.entry_date)).join('\n'),
+                            entries.map(e => formatEntryTime(e.entry_time)).join('\n'),
+                            entries.map(() => dept).join('\n')
+                        ];
+                    } else {
+                        attendedCells = ['No sessions logged yet', '', '', ''];
+                    }
                 }
 
                 const answerList = (answersByReg.get(r.id) || []).slice().sort((a, b) => a.order - b.order);
@@ -579,40 +606,58 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     r.institution_name_snapshot || '',
                     r.course_name || '',
                     formatRegistrationTime(r.created_at),
-                    attendedValue,
+                    ...targetingFieldColumns.map(f => r[f.snapshotKey] || ''),
+                    ...attendedCells,
                     answersValue
                 ];
             });
 
+            const answersColIndex = staticHeaders.length + targetingFieldColumns.length + attendedSubColumnCount;
             // An empty Answers column (no course in this export has any
             // custom questions) just adds a blank column to look at —
             // dropped entirely rather than exported empty.
-            const answersColIndex = headers.indexOf('Answers');
             const hasAnyAnswers = rows.some(row => (row[answersColIndex] || '').toString().trim() !== '');
+            let headerRow1 = [...staticHeaders, ...targetingFieldColumns.map(f => f.label), 'Attended', '', '', '', 'Answers'];
+            let headerRow2 = [...staticHeaders.map(() => ''), ...targetingFieldColumns.map(() => ''), 'Title', 'Date', 'Time', 'Dept', ''];
             if (!hasAnyAnswers) {
-                headers.splice(answersColIndex, 1);
+                headerRow1.splice(answersColIndex, 1);
+                headerRow2.splice(answersColIndex, 1);
                 rows.forEach(row => row.splice(answersColIndex, 1));
             }
 
+            // Every single-label column spans both header rows (vertical
+            // merge) so its label doesn't look like it's floating above an
+            // empty second row; "Attended" spans across its 4 sub-columns
+            // on row 1 only, since row 2 carries their real sub-headers.
+            const attendedStartCol = staticHeaders.length + targetingFieldColumns.length;
+            const headerMerges = [];
+            for (let col = 0; col < headerRow1.length; col++) {
+                if (col >= attendedStartCol && col < attendedStartCol + attendedSubColumnCount) continue;
+                headerMerges.push({ s: { r: 0, c: col }, e: { r: 1, c: col } });
+            }
+            headerMerges.push({ s: { r: 0, c: attendedStartCol }, e: { r: 0, c: attendedStartCol + attendedSubColumnCount - 1 } });
+
             // Column alignment: "#" left (it's a number, which Excel would
             // otherwise right-align by default); Staff Number, Gender, and
-            // Registration Time centered; Attended left-aligned with
-            // wrapping since a non-attendance course's cell can hold
-            // several stacked "Title | Date | Time | Department" lines.
+            // Registration Time centered; all 4 Attended sub-columns
+            // left-aligned with wrapping, since a non-attendance course's
+            // cells can hold several stacked lines (one per logged session).
             const columnAlignments = {
                 0: { horizontal: 'left' },
                 3: { horizontal: 'center' },
                 4: { horizontal: 'center' },
-                7: { horizontal: 'center' },
-                8: { horizontal: 'left', wrapText: true }
+                7: { horizontal: 'center' }
             };
+            for (let i = 0; i < attendedSubColumnCount; i++) {
+                columnAlignments[attendedStartCol + i] = { horizontal: 'left', wrapText: true };
+            }
 
             const courseFilterId = getCourseFilterIdFromUrl();
             const filteredCourseName = courseFilterId ? (allData[0]?.course_name || 'course') : null;
             const safeName = filteredCourseName ? filteredCourseName.replace(/[^a-z0-9]+/gi, '_').toLowerCase() : null;
             const fileName = safeName ? `students_${safeName}` : 'students_report';
 
-            exportStyledExcel(headers, rows, fileName, 'Participants', [1, 3, 7], columnAlignments);
+            exportStyledExcel([headerRow1, headerRow2], rows, fileName, 'Participants', [1, 3, 7], columnAlignments, headerMerges);
             } finally {
                 btn.disabled = false;
                 btn.textContent = originalLabel;
