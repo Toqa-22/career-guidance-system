@@ -184,6 +184,21 @@
 }
 .period-report-fields .btn-export{ flex:0 0 auto; }
 
+.stage-filter-fields{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+}
+.stage-filter-checkbox{
+  display:flex; align-items:center; gap:7px;
+  font-size:13.5px; font-weight:700; color:#31465C;
+  cursor:pointer; user-select:none;
+}
+.stage-filter-checkbox input{
+  width:17px; height:17px; cursor:pointer; accent-color: var(--primary);
+}
+
 /* ===== الفلاتر ===== */
 .filters-panel{
   background:#fff;
