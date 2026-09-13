@@ -43,6 +43,15 @@ function getFilteredReportStudents(){
   const from = document.getElementById("repFrom").value;
   const to = document.getElementById("repTo").value;
 
+  // فلتر المرحلة الدراسية: صندوق فارغ بالكامل (لا شيء محدد) يعني كل
+  // المراحل بلا استثناء، بنفس منطق حقلي الفترة تماماً. "أخرى" هنا لا
+  // تطابق نصاً حرفياً — أي قيمة مخصّصة كتبها المتدرب يدوياً (أي شيء غير
+  // "طالب" أو "خريج" تحديداً) تُحتسب ضمنها.
+  const wantsStudent = document.getElementById("repStageStudent").checked;
+  const wantsGraduate = document.getElementById("repStageGraduate").checked;
+  const wantsOther = document.getElementById("repStageOther").checked;
+  const anyStageFilterActive = wantsStudent || wantsGraduate || wantsOther;
+
   const list = reportsState.allStudents.filter(s => {
     // A student still on the waitlist (not yet assigned a training period)
     // has no training_start at all — previously this excluded them from
@@ -50,10 +59,21 @@ function getFilteredReportStudents(){
     // date filter, meaning "show everyone"). The date check below only
     // makes sense once a specific period is actually selected; with no
     // filter active, everyone should show regardless of training_start.
-    if (!from && !to) return true;
-    if (!s.training_start) return false;
-    if (from && s.training_start < from) return false;
-    if (to && s.training_start > to) return false;
+    if (from || to) {
+      if (!s.training_start) return false;
+      if (from && s.training_start < from) return false;
+      if (to && s.training_start > to) return false;
+    }
+
+    if (anyStageFilterActive) {
+      const stage = s.academic_stage || "";
+      const isOtherStage = stage !== "طالب" && stage !== "خريج" && stage !== "";
+      const matches = (wantsStudent && stage === "طالب")
+        || (wantsGraduate && stage === "خريج")
+        || (wantsOther && isOtherStage);
+      if (!matches) return false;
+    }
+
     return true;
   });
 
@@ -63,9 +83,23 @@ function getFilteredReportStudents(){
 /**
  * نص وصف الفترة المختارة، لعرضه في شريط الملخص أعلى كل تقرير.
  */
+/**
+ * نص وصف الفترة المختارة، لعرضه في شريط الملخص أعلى كل تقرير. يضيف أيضاً
+ * وصف فلتر المرحلة الدراسية إن كان مُفعّلاً، بقراءة الصناديق مباشرة هنا
+ * بدل تمريرها كمعامل إلى كل نداء من نداءات هذه الدالة الأربعة.
+ */
 function reportPeriodLabel(periodFrom, periodTo){
-  if (!periodFrom && !periodTo) return "جميع الفترات";
-  return `الفترة: من ${periodFrom ? formatDateShort(periodFrom) : "البداية"} إلى ${periodTo ? formatDateShort(periodTo) : "الآن"}`;
+  const periodPart = (!periodFrom && !periodTo)
+    ? "جميع الفترات"
+    : `الفترة: من ${periodFrom ? formatDateShort(periodFrom) : "البداية"} إلى ${periodTo ? formatDateShort(periodTo) : "الآن"}`;
+
+  const stages = [];
+  if (document.getElementById("repStageStudent").checked) stages.push("طالب");
+  if (document.getElementById("repStageGraduate").checked) stages.push("خريج");
+  if (document.getElementById("repStageOther").checked) stages.push("أخرى");
+  const stagePart = stages.length > 0 ? ` — المرحلة الدراسية: ${stages.join("، ")}` : "";
+
+  return periodPart + stagePart;
 }
 
 // ---------------------------------------------------------------------------
