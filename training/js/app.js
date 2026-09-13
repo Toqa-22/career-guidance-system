@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindTrainingModeToggle();
   bindPlaceOfTrainingToggle();
   bindNationalityToggle();
+  bindAcademicStageToggle();
   initFormSubmit();
 });
 
@@ -34,6 +35,22 @@ function bindNationalityToggle(){
     otherInput.style.display = isOther ? "block" : "none";
     if (!isOther) otherInput.value = "";
     clearFieldError("nationality");
+  });
+}
+
+/**
+ * ربط قائمة «المرحلة الدراسية» المنسدلة بإظهار/إخفاء حقل نص حر بديل عند
+ * اختيار "أخرى" تحديداً — نفس نمط bindNationalityToggle أعلاه تماماً.
+ */
+function bindAcademicStageToggle(){
+  const select = document.getElementById("academic_stage");
+  const otherInput = document.getElementById("academic_stage_other");
+
+  select.addEventListener("change", () => {
+    const isOther = select.value === "أخرى";
+    otherInput.style.display = isOther ? "block" : "none";
+    if (!isOther) otherInput.value = "";
+    clearFieldError("academic_stage");
   });
 }
 
@@ -384,7 +401,10 @@ function validateForm(){
     ? document.getElementById("place_of_training_other").value.trim()
     : placeOfTrainingSelect;
   const trainingType = document.getElementById("training_type").value;
-  const academicStage = document.getElementById("academic_stage").value;
+  const academicStageSelect = document.getElementById("academic_stage").value;
+  const academicStage = academicStageSelect === "أخرى"
+    ? document.getElementById("academic_stage_other").value.trim()
+    : academicStageSelect;
   const departments = Array.from(deptPickerState.selected);
 
   [
