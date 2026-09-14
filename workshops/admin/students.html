@@ -25,6 +25,12 @@
 <!-- Plain <script> tags, NOT type="module" — xlsx-js-style must be loaded this
      way to expose the global XLSX object; excel-export.js depends on it -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<!-- xlsx-js-style has no support at all for RTL sheet view (confirmed by
+     searching its source directly — the property genuinely doesn't exist
+     anywhere in it), so the Participant Registrations export patches the
+     RTL flag into the generated file's own internal XML afterward. JSZip
+     is what makes that patch possible client-side. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="../js/excel-export.js"></script>
 <script src="../js/theme-rotator.js"></script>
 </head>
