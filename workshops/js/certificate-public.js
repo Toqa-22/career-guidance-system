@@ -94,19 +94,7 @@ document.getElementById('checkEmailBtn').addEventListener('click', async () => {
         const result = await res.json();
 
         if (!res.ok || !result.found) {
-            // Shows the real backend error/status right on the page now,
-            // instead of always the same generic guess — getting this
-            // detail out of DevTools/Network tab turned out to be very
-            // hard to walk through remotely, so it's visible here directly.
-            const diagnosticParts = [];
-            if (result.error) diagnosticParts.push(`Error: ${result.error}`);
-            diagnosticParts.push(`HTTP ${res.status}, found: ${result.found}`);
-            if (result.diagnostic_total_registrations_visible !== undefined) diagnosticParts.push(`Registrations visible to server: ${result.diagnostic_total_registrations_visible}`);
-            if (result.diagnostic_count_error) diagnosticParts.push(`Count error: ${result.diagnostic_count_error}`);
-            if (result.diagnostic_course_id !== undefined) diagnosticParts.push(`Searched course_id: ${result.diagnostic_course_id}`);
-            if (result.diagnostic_searched_staff_number !== undefined) diagnosticParts.push(`Searched staff_number: "${result.diagnostic_searched_staff_number}"`);
-            const diagnosticLine = `<br><br><span style="font-size:12px; color:#92400e; font-family:monospace;">${diagnosticParts.join('<br>')}</span>`;
-            errorBox.innerHTML = 'Staff number not found.<br><br>This staff number is not registered for this course.<br>Please use the same staff number you used during registration.' + diagnosticLine;
+            errorBox.innerHTML = 'Staff number not found.<br><br>This staff number is not registered for this course.<br>Please use the same staff number you used during registration.';
             errorBox.classList.remove('hidden-element');
             return;
         }
@@ -117,10 +105,7 @@ document.getElementById('checkEmailBtn').addEventListener('click', async () => {
         document.getElementById('staffNumberStep').classList.add('hidden-element');
         document.getElementById('verifiedStep').classList.remove('hidden-element');
     } catch (err) {
-        // Same reasoning as above — the real exception shown directly on
-        // the page instead of a generic message, so this doesn't need
-        // DevTools to diagnose either.
-        errorBox.innerHTML = `Something went wrong checking your registration. Please try again in a moment.<br><br><span style="font-size:12px; color:#92400e; font-family:monospace;">Details: ${err.message || String(err)}</span>`;
+        errorBox.textContent = 'Something went wrong checking your registration. Please try again in a moment.';
         errorBox.classList.remove('hidden-element');
     } finally {
         setBtnLoading(btn, false, 'Check');
