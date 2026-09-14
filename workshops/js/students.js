@@ -591,8 +591,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
             const worksheet = XLSX.utils.aoa_to_sheet([row1, row2, row3, ...rows]);
             worksheet['!merges'] = merges;
-            // RTL sheet view, matching the original template exactly.
-            worksheet['!workbook'] = worksheet['!workbook'] || {};
 
             const totalCols = row2.length;
             for (let c = 0; c < totalCols; c++) {
@@ -625,19 +623,46 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
 
             worksheet['!cols'] = [
-                { wch: 30 }, { wch: 13 }, { wch: 22 }, { wch: 13 }, { wch: 14 },
-                { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 30 },
-                { wch: 32 }, { wch: 24 }, { wch: 28 }, { wch: 7 }, { wch: 7 },
-                { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 9 }, { wch: 20 },
-                { wch: 10 }, { wch: 30 }
+                { wch: 34 }, { wch: 15 }, { wch: 28 }, { wch: 16 }, { wch: 16 },
+                { wch: 18 }, { wch: 26 }, { wch: 20 }, { wch: 22 }, { wch: 34 },
+                { wch: 36 }, { wch: 28 }, { wch: 32 }, { wch: 8 }, { wch: 8 },
+                { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 24 },
+                { wch: 10 }, { wch: 34 }
             ];
+
+            // Row height grows or shrinks to fit whatever the row actually
+            // holds, instead of one fixed height for every row — a short
+            // "Female" and a long wrapped qualification string end up in
+            // very different places otherwise: either the tall content
+            // gets clipped, or every row is stretched to fit the longest
+            // one in the whole sheet. Estimates how many lines the widest
+            // cell in each row will actually wrap to, at that column's
+            // real width, and sizes the row for exactly that.
+            function estimateWrappedLineCount(text, colWchWidth) {
+                const str = String(text == null ? '' : text);
+                if (!str) return 1;
+                // ~1 "wch" unit holds roughly 1 character at this font/size;
+                // a little slack (0.9) since bold/Arabic glyphs run wider.
+                const charsPerLine = Math.max(4, colWchWidth * 0.9);
+                return Math.max(1, Math.ceil(str.length / charsPerLine));
+            }
+            function rowHeightForContent(rowValues, colWidths, ptPerLine, minPt) {
+                let maxLines = 1;
+                rowValues.forEach((val, c) => {
+                    const lines = estimateWrappedLineCount(val, colWidths[c]?.wch || 10);
+                    if (lines > maxLines) maxLines = lines;
+                });
+                return Math.max(minPt, maxLines * ptPerLine + 4);
+            }
+            const colWidths = worksheet['!cols'];
             worksheet['!rows'] = [
-                { hpt: 15 }, { hpt: 36 }, { hpt: 60 },
-                ...rows.map(() => ({ hpt: 22 }))
+                { hpt: rowHeightForContent(row1, colWidths, 15, 15) },
+                { hpt: rowHeightForContent(row2, colWidths, 15, 22) },
+                { hpt: rowHeightForContent(row3, colWidths, 15, 22) },
+                ...rows.map(rowValues => ({ hpt: rowHeightForContent(rowValues, colWidths, 16, 20) }))
             ];
 
             const workbook = XLSX.utils.book_new();
-            workbook.Workbook = { views: [{ RTL: true }] };
             XLSX.utils.book_append_sheet(workbook, worksheet, 'بيانات المشاركين | Participant');
 
             const courseFilterId = getCourseFilterIdFromUrl();
@@ -645,7 +670,36 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const safeName = filteredCourseName ? filteredCourseName.replace(/[^a-z0-9]+/gi, '_').toLowerCase() : null;
             const fileName = (safeName ? `students_${safeName}` : 'students_report') + `_${excelTodayStamp()}.xlsx`;
 
-            XLSX.writeFile(workbook, fileName);
+            // xlsx-js-style has no support at all for RTL sheet view (its
+            // Workbook.Views mechanism silently writes nothing — confirmed
+            // by inspecting its own source) — so the flag is patched
+            // directly into the generated file's internal XML afterward,
+            // the same way the original template has it, rather than
+            // relying on a library option that doesn't actually exist.
+            const wbout = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+            const zip = await JSZip.loadAsync(wbout);
+            const sheetPath = 'xl/worksheets/sheet1.xml';
+            const sheetXmlFile = zip.file(sheetPath);
+            if (sheetXmlFile) {
+                let sheetXml = await sheetXmlFile.async('string');
+                if (sheetXml.includes('<sheetView ')) {
+                    sheetXml = sheetXml.replace('<sheetView ', '<sheetView rightToLeft="1" ');
+                } else if (sheetXml.includes('<sheetView/>')) {
+                    sheetXml = sheetXml.replace('<sheetView/>', '<sheetView rightToLeft="1"/>');
+                }
+                zip.file(sheetPath, sheetXml);
+            }
+            const patchedBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+            const downloadUrl = URL.createObjectURL(patchedBlob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+
             alert(`Exported ${rows.length} record${rows.length === 1 ? '' : 's'} successfully.`);
 
             } finally {
