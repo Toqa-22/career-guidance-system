@@ -501,163 +501,153 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             btn.disabled = true;
             btn.textContent = 'Preparing…';
             try {
-            const regIds = allData.map(r => r.id);
 
-            // Answers are fetched fresh here rather than reused from the
-            // table's own state, since the table only loads them on demand
-            // (per row, when View is clicked) — the export needs all of them
-            // up front, flattened into one cell per registration.
-            let answersByReg = new Map();
-            if (regIds.length > 0) {
-                try {
-                    const { data: responses } = await client
-                        .from('question_responses')
-                        .select('registration_id, response_value, course_questions(question_text, display_order)')
-                        .in('registration_id', regIds);
-                    (responses || []).forEach(r => {
-                        if (!answersByReg.has(r.registration_id)) answersByReg.set(r.registration_id, []);
-                        answersByReg.get(r.registration_id).push({
-                            order: r.course_questions?.display_order || 0,
-                            text: r.course_questions ? r.course_questions.question_text : '(deleted question)',
-                            answer: formatResponseValue(r.response_value).replace(/<br>/g, ' | ')
-                        });
-                    });
-                } catch (e) {
-                    // Export still proceeds without answers rather than failing outright.
-                }
+            // ================================================================
+            // Ministry-standard template ("مديرية شمال الشرقية - سجل بيانات
+            // التدريب"), replicated exactly: same 22 columns, same two-row
+            // bilingual header with merges, same colors/fonts/RTL/borders/row
+            // striping. "Training Domains" (M) and "included in the approved
+            // HRD plan" (V) have no corresponding field anywhere in this
+            // system, so those two columns stay structurally present but
+            // empty for every row — not a bug, there's simply nothing to
+            // put there. "Program end date" (Q-S) is deliberately left
+            // empty per instruction, even though it has a real data source
+            // (course_date) the start-date columns already use.
+            // ================================================================
+
+            const GREEN_DARK = 'FF548135';
+            const GREEN_LIGHT = 'FFA8D08D';
+            const WHITE = 'FFFFFFFF';
+            const STRIPE_GRAY = 'FFF8F9FA';
+            const RED = 'FFFF0000';
+
+            const thinBorder = { top: { style: 'thin', color: { rgb: 'FF000000' } }, bottom: { style: 'thin', color: { rgb: 'FF000000' } }, left: { style: 'thin', color: { rgb: 'FF000000' } }, right: { style: 'thin', color: { rgb: 'FF000000' } } };
+            const centerWrap = { horizontal: 'center', vertical: 'center', wrapText: true };
+
+            function cellStyle({ bold = false, size = 12, color = 'FF000000', fill = null, border = thinBorder } = {}) {
+                const style = {
+                    font: { name: 'Times New Roman', sz: size, bold, color: { rgb: color } },
+                    alignment: centerWrap,
+                    border
+                };
+                if (fill) style.fill = { fgColor: { rgb: fill }, patternType: 'solid' };
+                return style;
             }
 
-            // For a course that doesn't require attendance, the Attended
-            // column instead lists every session the participant logged
-            // themselves via Activity Log — same {title, date, time,
-            // department} shown in the on-screen "View" modal
-            // (showActivityLogModal), fetched in bulk here the same way
-            // answers are above, and merged into ONE cell per registration
-            // rather than one Excel row per logged session.
-            let logEntriesByReg = new Map();
-            const nonAttendanceRegIds = allData.filter(r => r.attendance_required === false).map(r => r.id);
-            if (nonAttendanceRegIds.length > 0) {
-                try {
-                    const { data: entries } = await client
-                        .from('activity_log_entries')
-                        .select('registration_id, title, entry_date, entry_time')
-                        .in('registration_id', nonAttendanceRegIds)
-                        .order('entry_date', { ascending: true })
-                        .order('entry_time', { ascending: true });
-                    (entries || []).forEach(e => {
-                        if (!logEntriesByReg.has(e.registration_id)) logEntriesByReg.set(e.registration_id, []);
-                        logEntriesByReg.get(e.registration_id).push(e);
-                    });
-                } catch (e) {
-                    // Export still proceeds without log entries rather than failing outright.
-                }
-            }
-
-            const staticHeaders = ['#', 'Phone Number', 'Participant Name', 'Staff Number', 'Gender', 'Institution Origin', 'Activity Name', 'Registration Time'];
-            // Same order as the registration form itself and the
-            // participants table — pairs each display label with its
-            // registrations._snapshot column, since that's what's actually
-            // stored per-registration (not the live/current profile value).
-            const targetingFieldColumns = [
-                { label: 'Job Level', snapshotKey: 'job_level_snapshot' },
-                { label: 'Nationality', snapshotKey: 'nationality_snapshot' },
-                { label: 'Highest Educational Qualification', snapshotKey: 'education_qualification_snapshot' },
-                { label: 'Experience Years', snapshotKey: 'experience_years_snapshot' },
-                { label: 'Organization', snapshotKey: 'organization_snapshot' },
-                { label: 'Directorate', snapshotKey: 'directorate_snapshot' },
-                { label: 'Type of Program', snapshotKey: 'program_type_snapshot' },
-                { label: 'Nature of Attendance', snapshotKey: 'attendance_nature_snapshot' }
+            // Row 1: plain banner row, dark green across every column, only
+            // the first cell carries text — matches the template exactly.
+            const row1 = ['*/', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+            // Row 2: the 18 real column groups (bilingual Arabic/English) —
+            // date groups occupy 3 columns each (day/month/year), the rest
+            // occupy 1 column spanning both header rows.
+            const row2 = [
+                'Full Name /   الاسم الكامل', 'Staff Number/ الرقم الوظيفي', 'المسمى الوظيفي / DESIGNATION ',
+                'المستوى الوظيفي / Job Level', 'Gender/الجنس', 'الجنسية / NATIONALITY ',
+                'أعلى مؤهل دراسي / Highest educational qualification', 'سنوات الخبرة/ experience years',
+                'جهة العمل / Employer', 'المديرية/ directorate', 'عنوان البرنامج | TITLE OF PROGRAM',
+                'نوع البرنامج| Type of Program', 'المجالات التدريبية  / Training Domains',
+                'تاريخ بدء البرنامج / program start date', '', '',
+                'تاريخ إنتهاء البرنامج / program end date', '', '',
+                'طبيعة الحضور | Nature of Attendance', '',
+                'هل البرنامج مدرج في خطة تنمية الموارد البشرية المعتمدة | included in the approved HRD plan'
             ];
-            const attendedSubColumnCount = 4; // Title, Date, Time, Dept
+            const row3 = ['', '', '', '', '', '', '', '', '', '', '', '', '',
+                'اليوم/ Day ', 'الشهر / month', 'السنة / year',
+                'اليوم/ Day ', 'الشهر / month', 'السنة / year',
+                '', '', ''];
 
-            const rows = allData.map((r, i) => {
-                const isAttendanceRequired = r.attendance_required !== false;
-                let attendedCells;
-                if (isAttendanceRequired) {
-                    // No session title/date/time/department exists for an
-                    // attendance-required course — the Yes/No answer itself
-                    // goes under "Title" rather than leaving all four
-                    // sub-columns blank with no indication either way.
-                    attendedCells = [r.attended ? 'Yes' : 'No', '', '', ''];
-                } else {
-                    const dept = (r.institution_name_snapshot || '').replace('Ibra - ', '') || '—';
-                    const entries = logEntriesByReg.get(r.id) || [];
-                    if (entries.length > 0) {
-                        attendedCells = [
-                            entries.map(e => e.title).join('\n'),
-                            entries.map(e => formatDateDDMMYYYY(e.entry_date)).join('\n'),
-                            entries.map(e => formatEntryTime(e.entry_time)).join('\n'),
-                            entries.map(() => dept).join('\n')
-                        ];
-                    } else {
-                        attendedCells = ['No sessions logged yet', '', '', ''];
-                    }
-                }
+            const singleColIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 19, 20, 21]; // every column except the two 3-wide date groups
+            const merges = [
+                { s: { r: 1, c: 13 }, e: { r: 1, c: 15 } }, // program start date (N2:P2)
+                { s: { r: 1, c: 16 }, e: { r: 1, c: 18 } }, // program end date (Q2:S2)
+                ...singleColIndexes.map(c => ({ s: { r: 1, c }, e: { r: 2, c } }))
+            ];
 
-                const answerList = (answersByReg.get(r.id) || []).slice().sort((a, b) => a.order - b.order);
-                const answersValue = answerList.map(a => `${a.text}: ${a.answer}`).join('; ');
-
+            const rows = allData.map(r => {
+                const startDate = r.course_date ? new Date(r.course_date + 'T00:00:00') : null;
                 return [
-                    i + 1,
-                    r.phone_number || '',
                     r.staff_name || '',
                     r.staff_number || '',
-                    r.sex_snapshot || r.sex || 'N/A',
-                    r.institution_name_snapshot || '',
+                    r.designation_snapshot || '',
+                    r.job_level_snapshot || '',
+                    r.sex_snapshot || r.sex || '',
+                    r.nationality_snapshot || '',
+                    r.education_qualification_snapshot || '',
+                    r.experience_years_snapshot || '',
+                    r.organization_snapshot || '',
+                    r.directorate_snapshot || '',
                     r.course_name || '',
-                    formatRegistrationTime(r.created_at),
-                    ...targetingFieldColumns.map(f => r[f.snapshotKey] || ''),
-                    ...attendedCells,
-                    answersValue
+                    r.program_type_snapshot || '',
+                    '', // Training Domains — no source field in this system
+                    startDate ? startDate.getDate() : '',
+                    startDate ? startDate.getMonth() + 1 : '',
+                    startDate ? startDate.getFullYear() : '',
+                    '', '', '', // program end date — left empty on purpose
+                    r.attendance_nature_snapshot || '',
+                    '', // unlabeled spacer column, matches the template
+                    ''  // HRD plan inclusion — no source field in this system
                 ];
             });
 
-            const answersColIndex = staticHeaders.length + targetingFieldColumns.length + attendedSubColumnCount;
-            // An empty Answers column (no course in this export has any
-            // custom questions) just adds a blank column to look at —
-            // dropped entirely rather than exported empty.
-            const hasAnyAnswers = rows.some(row => (row[answersColIndex] || '').toString().trim() !== '');
-            let headerRow1 = [...staticHeaders, ...targetingFieldColumns.map(f => f.label), 'Attended', '', '', '', 'Answers'];
-            let headerRow2 = [...staticHeaders.map(() => ''), ...targetingFieldColumns.map(() => ''), 'Title', 'Date', 'Time', 'Dept', ''];
-            if (!hasAnyAnswers) {
-                headerRow1.splice(answersColIndex, 1);
-                headerRow2.splice(answersColIndex, 1);
-                rows.forEach(row => row.splice(answersColIndex, 1));
+            const worksheet = XLSX.utils.aoa_to_sheet([row1, row2, row3, ...rows]);
+            worksheet['!merges'] = merges;
+            // RTL sheet view, matching the original template exactly.
+            worksheet['!workbook'] = worksheet['!workbook'] || {};
+
+            const totalCols = row2.length;
+            for (let c = 0; c < totalCols; c++) {
+                const ref1 = XLSX.utils.encode_cell({ r: 0, c });
+                if (!worksheet[ref1]) worksheet[ref1] = { t: 's', v: '' };
+                worksheet[ref1].s = cellStyle({ bold: false, fill: GREEN_DARK });
+
+                const ref2 = XLSX.utils.encode_cell({ r: 1, c });
+                if (!worksheet[ref2]) worksheet[ref2] = { t: 's', v: '' };
+                worksheet[ref2].s = cellStyle({ bold: true, fill: GREEN_LIGHT });
+
+                const ref3 = XLSX.utils.encode_cell({ r: 2, c });
+                if (!worksheet[ref3]) worksheet[ref3] = { t: 's', v: '' };
+                // Day/Month sub-header text is red in the original template;
+                // Year sub-headers and every other row-3 cell stay black.
+                const isRedSubheader = [13, 14, 16, 17].includes(c);
+                worksheet[ref3].s = cellStyle({ bold: true, fill: GREEN_LIGHT, color: isRedSubheader ? RED : 'FF000000' });
             }
 
-            // Every single-label column spans both header rows (vertical
-            // merge) so its label doesn't look like it's floating above an
-            // empty second row; "Attended" spans across its 4 sub-columns
-            // on row 1 only, since row 2 carries their real sub-headers.
-            const attendedStartCol = staticHeaders.length + targetingFieldColumns.length;
-            const headerMerges = [];
-            for (let col = 0; col < headerRow1.length; col++) {
-                if (col >= attendedStartCol && col < attendedStartCol + attendedSubColumnCount) continue;
-                headerMerges.push({ s: { r: 0, c: col }, e: { r: 1, c: col } });
+            // Data rows: alternating white/light-gray striping, same as the
+            // template, starting from the first data row (row index 3).
+            for (let r = 0; r < rows.length; r++) {
+                const excelRow = 3 + r;
+                const stripeFill = (r % 2 === 0) ? WHITE : STRIPE_GRAY;
+                for (let c = 0; c < totalCols; c++) {
+                    const ref = XLSX.utils.encode_cell({ r: excelRow, c });
+                    if (!worksheet[ref]) worksheet[ref] = { t: 's', v: '' };
+                    worksheet[ref].s = cellStyle({ bold: false, size: 13, fill: stripeFill });
+                }
             }
-            headerMerges.push({ s: { r: 0, c: attendedStartCol }, e: { r: 0, c: attendedStartCol + attendedSubColumnCount - 1 } });
 
-            // Column alignment: "#" left (it's a number, which Excel would
-            // otherwise right-align by default); Staff Number, Gender, and
-            // Registration Time centered; all 4 Attended sub-columns
-            // left-aligned with wrapping, since a non-attendance course's
-            // cells can hold several stacked lines (one per logged session).
-            const columnAlignments = {
-                0: { horizontal: 'left' },
-                3: { horizontal: 'center' },
-                4: { horizontal: 'center' },
-                7: { horizontal: 'center' }
-            };
-            for (let i = 0; i < attendedSubColumnCount; i++) {
-                columnAlignments[attendedStartCol + i] = { horizontal: 'left', wrapText: true };
-            }
+            worksheet['!cols'] = [
+                { wch: 30 }, { wch: 13 }, { wch: 22 }, { wch: 13 }, { wch: 14 },
+                { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 30 },
+                { wch: 32 }, { wch: 24 }, { wch: 28 }, { wch: 7 }, { wch: 7 },
+                { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 9 }, { wch: 20 },
+                { wch: 10 }, { wch: 30 }
+            ];
+            worksheet['!rows'] = [
+                { hpt: 15 }, { hpt: 36 }, { hpt: 60 },
+                ...rows.map(() => ({ hpt: 22 }))
+            ];
+
+            const workbook = XLSX.utils.book_new();
+            workbook.Workbook = { views: [{ RTL: true }] };
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'بيانات المشاركين | Participant');
 
             const courseFilterId = getCourseFilterIdFromUrl();
             const filteredCourseName = courseFilterId ? (allData[0]?.course_name || 'course') : null;
             const safeName = filteredCourseName ? filteredCourseName.replace(/[^a-z0-9]+/gi, '_').toLowerCase() : null;
-            const fileName = safeName ? `students_${safeName}` : 'students_report';
+            const fileName = (safeName ? `students_${safeName}` : 'students_report') + `_${excelTodayStamp()}.xlsx`;
 
-            exportStyledExcel([headerRow1, headerRow2], rows, fileName, 'Participants', [1, 3, 7], columnAlignments, headerMerges);
+            XLSX.writeFile(workbook, fileName);
+            alert(`Exported ${rows.length} record${rows.length === 1 ? '' : 's'} successfully.`);
+
             } finally {
                 btn.disabled = false;
                 btn.textContent = originalLabel;
