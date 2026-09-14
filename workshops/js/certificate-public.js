@@ -94,7 +94,14 @@ document.getElementById('checkEmailBtn').addEventListener('click', async () => {
         const result = await res.json();
 
         if (!res.ok || !result.found) {
-            errorBox.innerHTML = 'Staff number not found.<br><br>This staff number is not registered for this course.<br>Please use the same staff number you used during registration.';
+            // Shows the real backend error/status right on the page now,
+            // instead of always the same generic guess — getting this
+            // detail out of DevTools/Network tab turned out to be very
+            // hard to walk through remotely, so it's visible here directly.
+            const diagnosticLine = result.error
+                ? `<br><br><span style="font-size:12px; color:#92400e; font-family:monospace;">Details: ${result.error} (HTTP ${res.status})</span>`
+                : `<br><br><span style="font-size:12px; color:#92400e; font-family:monospace;">HTTP ${res.status}, found: ${result.found}</span>`;
+            errorBox.innerHTML = 'Staff number not found.<br><br>This staff number is not registered for this course.<br>Please use the same staff number you used during registration.' + diagnosticLine;
             errorBox.classList.remove('hidden-element');
             return;
         }
@@ -105,7 +112,10 @@ document.getElementById('checkEmailBtn').addEventListener('click', async () => {
         document.getElementById('staffNumberStep').classList.add('hidden-element');
         document.getElementById('verifiedStep').classList.remove('hidden-element');
     } catch (err) {
-        errorBox.textContent = 'Something went wrong checking your registration. Please try again in a moment.';
+        // Same reasoning as above — the real exception shown directly on
+        // the page instead of a generic message, so this doesn't need
+        // DevTools to diagnose either.
+        errorBox.innerHTML = `Something went wrong checking your registration. Please try again in a moment.<br><br><span style="font-size:12px; color:#92400e; font-family:monospace;">Details: ${err.message || String(err)}</span>`;
         errorBox.classList.remove('hidden-element');
     } finally {
         setBtnLoading(btn, false, 'Check');
