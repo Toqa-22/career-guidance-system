@@ -604,9 +604,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
                 const ref3 = XLSX.utils.encode_cell({ r: 2, c });
                 if (!worksheet[ref3]) worksheet[ref3] = { t: 's', v: '' };
-                // Day/Month sub-header text is red in the original template;
-                // Year sub-headers and every other row-3 cell stay black.
-                const isRedSubheader = [13, 14, 16, 17].includes(c);
+                // Day/Month/Year sub-header text is all red, matching the
+                // "month" column's color across both date groups.
+                const isRedSubheader = [13, 14, 15, 16, 17, 18].includes(c);
                 worksheet[ref3].s = cellStyle({ bold: true, fill: GREEN_LIGHT, color: isRedSubheader ? RED : 'FF000000' });
             }
 
