@@ -394,7 +394,12 @@ document.getElementById('hallRequestForm').addEventListener('submit', async (e) 
         for (const entry of entries) {
             const clash = relevant.find(r =>
                 r.reservation_date === entry.reservation_date &&
-                entry.start_time < r.end_time && entry.end_time > r.start_time
+                // Postgres returns time columns as "HH:MM:SS", but the
+                // entry's own value (from <input type="time">) is "HH:MM"
+                // — comparing the raw strings breaks exactly at the
+                // back-to-back boundary ("11:00" < "11:00:00" is TRUE in
+                // JS string comparison). Slicing both to "HH:MM" fixes it.
+                entry.start_time.slice(0, 5) < r.end_time.slice(0, 5) && entry.end_time.slice(0, 5) > r.start_time.slice(0, 5)
             );
             if (clash) {
                 const statusNote = clash.isPending ? ' (another department\'s request is already pending for this slot)' : '';
