@@ -778,7 +778,16 @@ document.getElementById('hallReservationForm').addEventListener('submit', async 
         for (const entry of entries) {
             const clash = relevant.find(r =>
                 r.reservation_date === entry.reservation_date &&
-                entry.start_time < r.end_time && entry.end_time > r.start_time
+                // Postgres returns time columns as "HH:MM:SS", but the
+                // entry's own value (from <input type="time">) is "HH:MM"
+                // — a plain string comparison between the two is broken at
+                // the exact boundary that back-to-back bookings hit: e.g.
+                // "11:00" < "11:00:00" is TRUE in JS string comparison
+                // (the shorter string is a prefix of the longer one), which
+                // wrongly treated an immediately-following booking as
+                // overlapping. Slicing both sides to "HH:MM" first fixes
+                // it regardless of which one carries seconds.
+                entry.start_time.slice(0, 5) < r.end_time.slice(0, 5) && entry.end_time.slice(0, 5) > r.start_time.slice(0, 5)
             );
             if (clash) {
                 const noteText = clash.isPending
