@@ -1404,13 +1404,37 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 alert("Activity saved, but couldn't check hall availability: " + checkErr.message);
                 return;
             }
+
+            // Same as the standalone Hall Reservation page: also checked
+            // against OTHER departments' pending requests for this hall,
+            // not just already-confirmed bookings — otherwise this could
+            // silently book over a slot someone's still waiting on a
+            // decision for.
+            const { data: pendingRequests, error: reqErr } = await client
+                .from('hall_requests')
+                .select('reservation_date, start_time, end_time, course_name, organizer_name')
+                .eq('hall', hall)
+                .eq('status', 'pending')
+                .in('reservation_date', dates);
+            if (reqErr) {
+                alert("Activity saved, but couldn't check pending hall requests: " + reqErr.message);
+                return;
+            }
+
+            const relevantHallEntries = [
+                ...(existingOnDates || []).map(r => ({ ...r, isPending: false })),
+                ...(pendingRequests || []).map(r => ({ ...r, isPending: true }))
+            ];
             for (const entry of entries) {
-                const clash = (existingOnDates || []).find(r =>
+                const clash = relevantHallEntries.find(r =>
                     r.reservation_date === entry.reservation_date &&
                     entry.start_time < r.end_time && entry.end_time > r.start_time
                 );
                 if (clash) {
-                    alert(`Activity saved, but ${hall} is already booked on ${clash.reservation_date} from ${clash.start_time} to ${clash.end_time} (${clash.course_name}) — book it separately from the Hall Reservation page once that's resolved.`);
+                    const msg = clash.isPending
+                        ? `Activity saved, but ${hall} has a PENDING request on ${clash.reservation_date} from ${clash.start_time} to ${clash.end_time} (${clash.course_name}, requested by ${clash.organizer_name}) — review it on the Dept Hall Requests page before booking over it.`
+                        : `Activity saved, but ${hall} is already booked on ${clash.reservation_date} from ${clash.start_time} to ${clash.end_time} (${clash.course_name}) — book it separately from the Hall Reservation page once that's resolved.`;
+                    alert(msg);
                     return;
                 }
             }
