@@ -366,9 +366,46 @@ document.getElementById('hallRequestForm').addEventListener('submit', async (e) 
 
     const submitBtn = document.getElementById('reqSubmitBtn');
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
+    submitBtn.textContent = 'Checking availability...';
 
     try {
+        // Same hall + same day + overlapping time is checked against BOTH
+        // tables: hall_reservations (already-confirmed bookings) and
+        // hall_requests with status='pending' (other departments' requests
+        // still awaiting a decision) — not 'approved' ones, since an
+        // approved request already has its own matching row in
+        // hall_reservations by the time it's approved (see the admin
+        // approve handler), so checking both would just show the exact
+        // same booking twice. A 'declined' request never blocks anything;
+        // that slot is free again.
+        const dates = entries.map(en => en.reservation_date);
+        const [{ data: existingReservations, error: resErr }, { data: existingRequests, error: reqErr }] = await Promise.all([
+            client.from('hall_reservations').select('reservation_date, start_time, end_time, course_name').eq('hall', hall).in('reservation_date', dates),
+            client.from('hall_requests').select('reservation_date, start_time, end_time, course_name').eq('hall', hall).eq('status', 'pending').in('reservation_date', dates)
+        ]);
+        if (resErr) throw resErr;
+        if (reqErr) throw reqErr;
+
+        const relevant = [
+            ...(existingReservations || []).map(r => ({ ...r, isPending: false })),
+            ...(existingRequests || []).map(r => ({ ...r, isPending: true }))
+        ];
+
+        for (const entry of entries) {
+            const clash = relevant.find(r =>
+                r.reservation_date === entry.reservation_date &&
+                entry.start_time < r.end_time && entry.end_time > r.start_time
+            );
+            if (clash) {
+                const statusNote = clash.isPending ? ' (another department\'s request is already pending for this slot)' : '';
+                setFormNote(`${hall} is already booked on ${clash.reservation_date} from ${formatTime12(clash.start_time)} to ${formatTime12(clash.end_time)} (${clash.course_name})${statusNote}. Please choose a different time.`);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Request';
+                return;
+            }
+        }
+
+        submitBtn.textContent = 'Submitting...';
         const booking_group_id = entries.length > 1 ? crypto.randomUUID() : null;
         const rows = entries.map(entry => ({
             hall, course_name, reservation_type, organizer_name, phone_number, participant_count,
@@ -378,7 +415,7 @@ document.getElementById('hallRequestForm').addEventListener('submit', async (e) 
         const { error } = await client.from('hall_requests').insert(rows);
         if (error) throw error;
 
-        setFormNote('Request submitted! The admin team will review it and confirm.', true);
+        setFormNote('Your request has been submitted. You will be contacted once it has been approved.', true);
         document.getElementById('hallRequestForm').reset();
         setDefaultFormDates();
     } catch (err) {
