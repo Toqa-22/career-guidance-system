@@ -1286,7 +1286,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const description = (featured.description || '').trim();
             const descEl = document.getElementById('featuredDescription');
             descEl.innerHTML = description
-                ? `📌 <span class="comment-shimmer-text">${description}</span>`
+                ? `<span class="comment-pin-icon">📌</span> <span class="comment-shimmer-text">${description}</span>`
                 : `Open registration — ${featured.unlimited_seats ? 'unlimited chairs' : featured.seats + ' chair' + (featured.seats === 1 ? '' : 's')} available.`;
             descEl.classList.toggle('has-comment', Boolean(description));
 
