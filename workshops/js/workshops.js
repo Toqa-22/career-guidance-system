@@ -1242,7 +1242,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         </svg>`;
                     }
                     document.getElementById('featuredTitle').textContent = closedDirectCourse.name;
-                    document.getElementById('featuredDescription').textContent = registrationStatusMessage(closedDirectCourse);
+                    const closedDescEl = document.getElementById('featuredDescription');
+                    closedDescEl.textContent = registrationStatusMessage(closedDirectCourse);
+                    closedDescEl.classList.remove('has-comment');
                     document.getElementById('featuredMeta').innerHTML = `<span>📅 ${closedDirectCourse.course_date}</span>`;
                     section.classList.remove('hidden-element');
                     // Nothing to register for on a closed/not-yet-open course
@@ -1282,7 +1284,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
             document.getElementById('featuredTitle').textContent = featured.name;
             const description = (featured.description || '').trim();
-            document.getElementById('featuredDescription').textContent = description || `Open registration — ${featured.unlimited_seats ? 'unlimited chairs' : featured.seats + ' chair' + (featured.seats === 1 ? '' : 's')} available.`;
+            const descEl = document.getElementById('featuredDescription');
+            descEl.innerHTML = description
+                ? `📌 <span class="comment-shimmer-text">${description}</span>`
+                : `Open registration — ${featured.unlimited_seats ? 'unlimited chairs' : featured.seats + ' chair' + (featured.seats === 1 ? '' : 's')} available.`;
+            descEl.classList.toggle('has-comment', Boolean(description));
 
             const metaParts = [`<span>📅 ${featured.course_date}</span>`];
             if ((featured.instructor_name || '').trim()) metaParts.push(`<span>🎓 ${featured.instructor_name}</span>`);
