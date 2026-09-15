@@ -288,6 +288,24 @@ function setFormNote(message, isSuccess) {
     note.classList.toggle('hall-note-success', !!isSuccess);
 }
 
+// The success confirmation specifically gets its own centered modal card
+// instead of the small inline note every other message uses — reuses the
+// exact same overlay/card pattern already styled in notifications.css
+// (loaded on this page already), so it matches the rest of the app rather
+// than introducing a new visual style.
+function showSubmittedModal(message) {
+    const overlay = document.createElement('div');
+    overlay.className = 'form-modal-overlay';
+    overlay.innerHTML = `
+        <div class="form-modal-card" style="text-align:center;">
+            <div class="form-toast-title" style="font-size:17px; margin-bottom:18px;">${message}</div>
+            <button type="button" class="confirm-btn confirm-ok" id="hallRequestConfirmBtn" style="width:100%;">Confirm</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#hallRequestConfirmBtn').addEventListener('click', () => overlay.remove());
+}
+
 document.getElementById('hallRequestForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     setFormNote('', false);
@@ -420,7 +438,8 @@ document.getElementById('hallRequestForm').addEventListener('submit', async (e) 
         const { error } = await client.from('hall_requests').insert(rows);
         if (error) throw error;
 
-        setFormNote('Your request has been submitted. You will be contacted once it has been approved.', true);
+        setFormNote('', false);
+        showSubmittedModal('Your request has been submitted. You will be contacted once it has been approved.');
         document.getElementById('hallRequestForm').reset();
         setDefaultFormDates();
     } catch (err) {
