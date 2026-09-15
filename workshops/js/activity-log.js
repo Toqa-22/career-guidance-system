@@ -112,7 +112,7 @@ if (!courseId) {
         document.getElementById('featuredTitle').textContent = data.name;
         const logDescription = (data.description || '').trim();
         const logDescEl = document.getElementById('featuredDescription');
-        logDescEl.textContent = logDescription ? `📌 ${logDescription}` : 'Log your sessions for this activity below.';
+        logDescEl.innerHTML = logDescription ? `📌 <span class="comment-shimmer-text">${logDescription}</span>` : 'Log your sessions for this activity below.';
         logDescEl.classList.toggle('has-comment', Boolean(logDescription));
         const metaParts = [`<span>📅 ${data.course_date || 'Date TBA'}</span>`];
         if ((data.instructor_name || '').trim()) metaParts.push(`<span>🎓 ${data.instructor_name}</span>`);
