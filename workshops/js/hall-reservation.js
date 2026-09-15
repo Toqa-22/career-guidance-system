@@ -751,9 +751,29 @@ document.getElementById('hallReservationForm').addEventListener('submit', async 
             .in('reservation_date', dates);
         if (checkErr) throw checkErr;
 
-        const relevant = isEditing && editingGroupId
-            ? (existingOnDates || []).filter(r => r.booking_group_id !== editingGroupId)
-            : (existingOnDates || []);
+        // Also checked here: OTHER departments' pending requests (not yet
+        // approved or declined) for this same hall — without this, an
+        // admin could book directly over a slot someone's already waiting
+        // on a decision for, and only find out when Approve fails on it
+        // later. A 'declined' request never blocks anything; that slot is
+        // free again, and an 'approved' one is already represented in
+        // hall_reservations by then, so checking it again here would just
+        // show the same booking twice.
+        const { data: pendingRequests, error: reqErr } = await client
+            .from('hall_requests')
+            .select('reservation_date, start_time, end_time, course_name, organizer_name')
+            .eq('hall', hall)
+            .eq('status', 'pending')
+            .in('reservation_date', dates);
+        if (reqErr) throw reqErr;
+
+        const relevant = [
+            ...(isEditing && editingGroupId
+                ? (existingOnDates || []).filter(r => r.booking_group_id !== editingGroupId)
+                : (existingOnDates || [])
+            ).map(r => ({ ...r, isPending: false })),
+            ...(pendingRequests || []).map(r => ({ ...r, isPending: true }))
+        ];
 
         for (const entry of entries) {
             const clash = relevant.find(r =>
@@ -761,7 +781,10 @@ document.getElementById('hallReservationForm').addEventListener('submit', async 
                 entry.start_time < r.end_time && entry.end_time > r.start_time
             );
             if (clash) {
-                setFormNote(`${hall} is already booked on ${clash.reservation_date} from ${formatTime12(clash.start_time)} to ${formatTime12(clash.end_time)} (${clash.course_name}).`);
+                const noteText = clash.isPending
+                    ? `${hall} has a PENDING request on ${clash.reservation_date} from ${formatTime12(clash.start_time)} to ${formatTime12(clash.end_time)} (${clash.course_name}, requested by ${clash.organizer_name}) — review it on the Dept Hall Requests page before booking over it.`
+                    : `${hall} is already booked on ${clash.reservation_date} from ${formatTime12(clash.start_time)} to ${formatTime12(clash.end_time)} (${clash.course_name}).`;
+                setFormNote(noteText);
                 submitBtn.disabled = false;
                 submitBtn.textContent = isEditing ? 'Update Booking' : 'Book Hall';
                 return;
