@@ -166,16 +166,30 @@ body:not(.theme-loading) .page-loading-overlay { opacity: 0; visibility: hidden;
 .featured-description { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 18px; max-width: 480px; }
 /* An admin-entered Comment is real information (a venue change, who to
    contact, etc.), not just filler seat-count text — it gets its own
-   clearly-marked box instead of blending into the same muted gray line. */
+   clearly-marked, eye-catching box instead of blending into the same
+   muted gray line, with a gentle entrance and a soft glowing pulse so it
+   actually draws the eye rather than reading as one more line of text. */
 .featured-description.has-comment {
     color: #92400e;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-left: 4px solid #f59e0b;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-weight: 600;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1.5px solid #fde68a;
+    border-left: 5px solid #f59e0b;
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1.55;
     max-width: 520px;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.18);
+    animation: commentSlideIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards, commentGlowPulse 2.6s ease-in-out 0.5s infinite;
+}
+@keyframes commentSlideIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes commentGlowPulse {
+    0%, 100% { box-shadow: 0 4px 16px rgba(245, 158, 11, 0.18); }
+    50% { box-shadow: 0 4px 22px rgba(245, 158, 11, 0.4); }
 }
 .featured-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 22px; font-size: 13.5px; font-weight: 600; color: var(--text-dark); }
 .featured-meta span { display: inline-flex; align-items: center; gap: 6px; }
