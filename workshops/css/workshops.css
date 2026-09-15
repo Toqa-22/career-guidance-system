@@ -167,8 +167,9 @@ body:not(.theme-loading) .page-loading-overlay { opacity: 0; visibility: hidden;
 /* An admin-entered Comment is real information (a venue change, who to
    contact, etc.), not just filler seat-count text — it gets its own
    clearly-marked, eye-catching box instead of blending into the same
-   muted gray line, with a gentle entrance and a soft glowing pulse so it
-   actually draws the eye rather than reading as one more line of text. */
+   muted gray line, with a gentle entrance, a soft glowing pulse, a subtle
+   float, and a shifting border color so it actually draws the eye rather
+   than reading as one more line of text. */
 .featured-description.has-comment {
     background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
     border: 1.5px solid #fde68a;
@@ -180,7 +181,57 @@ body:not(.theme-loading) .page-loading-overlay { opacity: 0; visibility: hidden;
     line-height: 1.55;
     max-width: 520px;
     box-shadow: 0 4px 16px rgba(245, 158, 11, 0.18);
-    animation: commentSlideIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards, commentGlowPulse 2.6s ease-in-out 0.5s infinite;
+    animation:
+        commentSlideIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards,
+        commentGlowPulse 2.6s ease-in-out 0.5s infinite,
+        commentFloat 3.4s ease-in-out 0.9s infinite,
+        commentBorderShift 4s ease-in-out 0.5s infinite;
+}
+.comment-pin-icon {
+    display: inline-block;
+    animation: commentPinWobble 1.8s ease-in-out 0.9s infinite;
+}
+@keyframes commentBorderShift {
+    0%, 100% { border-left-color: #f59e0b; }
+    50% { border-left-color: #fbbf24; }
+}
+@keyframes commentFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+@keyframes commentPinWobble {
+    0%, 100% { transform: rotate(0deg); }
+    20% { transform: rotate(-12deg); }
+    40% { transform: rotate(10deg); }
+    60% { transform: rotate(-6deg); }
+    80% { transform: rotate(4deg); }
+}
+/* Screen-size adjustment — same 640px/400px breakpoints the rest of this
+   page already uses. A large, floating, glowing box that's appropriately
+   eye-catching on desktop just eats space and feels oversized on a phone,
+   so it scales down its font/padding/shadow there, and drops the float +
+   pin-wobble motion at the narrowest size where the box is often close to
+   a thumb resting near the screen edge. */
+@media (max-width: 640px) {
+    .featured-description.has-comment {
+        font-size: 14.5px;
+        padding: 12px 14px;
+        max-width: 100%;
+        box-shadow: 0 3px 10px rgba(245, 158, 11, 0.16);
+    }
+}
+@media (max-width: 400px) {
+    .featured-description.has-comment {
+        font-size: 13.5px;
+        padding: 10px 12px;
+        animation: commentSlideIn 0.5s cubic-bezier(.34,1.56,.64,1) forwards, commentGlowPulse 2.6s ease-in-out 0.5s infinite;
+    }
+    .comment-pin-icon { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .featured-description.has-comment { animation: none; }
+    .comment-pin-icon { animation: none; }
+    .comment-shimmer-text { animation: none; }
 }
 /* The text itself shimmers — a moving gradient "sheen" sweeping across the
    words on a loop. This has to live on an inner span rather than the box
