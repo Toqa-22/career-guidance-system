@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="../../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../../assets/logo-192.png">
+<title>Create Evaluation / Exam</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<script src="../../js/idle-timeout.js" data-login-path="../../index.html"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/hall-requests-alert.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<script src="../js/theme-rotator.js"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link active" href="evaluations-dashboard.html">Evaluations &amp; Exams</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <div class="grid-panel">
+            <div class="card-box">
+                <h2 id="formPanelTitle">Create New Evaluation / Exam</h2>
+                <a href="evaluations-dashboard.html" class="return-to-dashboard-link" style="display:inline-block; margin-bottom:14px;">← Return to Evaluations &amp; Exams</a>
+                <form id="evaluationForm">
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">1</span> Basic Course Information</div>
+                        <div class="basic-info-fields">
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <span class="field-label">Title</span>
+                                    <input type="text" id="evalTitle" placeholder="e.g. BLS Pre-Course Quiz" required>
+                                </div>
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <span class="field-label">Choose Activity</span>
+                                    <select id="evalCourseSelect" required>
+                                        <option value="">-- Choose Activity --</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr; align-items: center;">
+                                <label style="display:flex; align-items:center; gap:10px; background:white; border:1px solid #d1d5db; border-radius:12px; padding:10px 14px; flex:1; cursor:pointer;">
+                                    <span style="font-size:13px; font-weight:700; color:#334155; white-space:nowrap;">Theme Color</span>
+                                    <input type="color" id="evalThemeColor" value="#7C3AED" style="width:42px; height:32px; padding:0; border:1px solid #d1d5db; border-radius:8px; cursor:pointer;">
+                                    <span id="evalThemeColorPreview" style="font-size:12px; color:#94a3b8;">#7C3AED</span>
+                                </label>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">Used for the buttons and accents on this evaluation's own public page.</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div style="flex:1;">
+                                    <label style="font-size:13px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Comment (optional)</label>
+                                    <textarea id="evalComment" placeholder="A note shown to participants at the top of the evaluation/exam page (e.g. instructions, time limit)..." rows="3" style="width:100%; padding:10px 14px; border:1px solid #d1d5db; border-radius:12px; font-family:inherit; font-size:13px; resize:vertical;"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">2</span> Questions</div>
+                        <p class="section-hint" style="margin-top:-6px;">At least one question is required — unlike Create Activity's optional Custom Questions, every question here must be answered to submit the evaluation. Use the "Page" number next to each question to put it on a later page (pages must be filled in order — you can't use page 3 until page 2 has a question or content block).</p>
+                        <p id="evalQuestionsRequiredHint" class="hidden-element" style="margin-top:-6px; color:#dc2626; font-weight:700; font-size:12.5px;">Add at least one question before saving.</p>
+                        <div id="evalQuestionsList"></div>
+                        <button type="button" class="btn-action btn-add" id="addEvalQuestionBtn" style="margin-top:10px;">+ Add Question</button>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">3</span> Page Content (optional)</div>
+                        <p class="section-hint" style="margin-top:-6px;">Informational reading shown to participants on the public exam page — use the "Page" number to put it on the same page as its related questions (content is shown before that page's questions).</p>
+                        <div id="evalContentList"></div>
+                        <button type="button" class="btn-action btn-add" id="addEvalContentBtn" style="margin-top:10px;">+ Add Content</button>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">4</span> Page Titles</div>
+                        <div id="evalPageTitlesSummary"></div>
+                    </div>
+
+                    <!-- Primary Actions Row -->
+                    <div class="button-group">
+                        <button type="submit" class="btn-flex btn-primary-action" id="submitEvalFormBtn">Save</button>
+                        <button type="button" class="btn-flex btn-secondary" onclick="window.location.href='evaluations-dashboard.html'">Cancel</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/create-evaluation.js?v=3"></script>
+<script src="../js/sidebar.js"></script>
+<script type="module" src="../js/hall-requests-alert.js"></script>
+</body>
+</html>

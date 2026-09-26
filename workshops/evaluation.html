@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+<title>Evaluation / Exam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/workshops.css?v=2">
+<link rel="stylesheet" href="css/notifications.css">
+<link rel="stylesheet" href="css/responsive.css?v=2">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="js/notify.js"></script>
+</head>
+<body class="full-bleed theme-loading">
+
+<div class="page-loading-overlay" aria-hidden="true">
+    <div class="page-loading-spinner"></div>
+</div>
+
+<section class="hero">
+    <div class="hero-shape hero-shape-1" aria-hidden="true"></div>
+    <div class="hero-shape hero-shape-2" aria-hidden="true"></div>
+    <div class="hero-shape hero-shape-3" aria-hidden="true"></div>
+    <div class="hero-inner">
+        <div class="brand-icon" aria-hidden="true">
+            <img src="assets/logo.png" alt="Ibra Hospital" class="brand-logo-img">
+        </div>
+        <h1 class="hero-title" style="font-size:26px;">Evaluation / Exam</h1>
+        <p class="hero-tagline">Complete the form below</p>
+    </div>
+</section>
+
+<div class="container">
+
+    <!-- ============ COURSE CARD ============ -->
+    <section id="evalCourseCard" class="featured">
+        <div class="featured-visual" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="40" height="40" fill="none">
+              <path d="M14 20L32 12L50 20L32 28L14 20Z" stroke="white" stroke-width="4" stroke-linejoin="round"/>
+              <path d="M22 26V38C22 38 26 44 32 44C38 44 42 38 42 38V26" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M50 20V32" stroke="white" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div class="featured-content">
+            <div class="eyebrow" id="evalPageActivity">Evaluation / Exam</div>
+            <h2 class="featured-title" id="evalPageTitle">Evaluation / Exam</h2>
+            <p class="featured-description hidden-element" id="evalComment"></p>
+        </div>
+    </section>
+
+    <!-- ============ FORM ============ -->
+    <section class="register-section" style="margin-top:20px;">
+        <div class="form-card eval-form-card">
+
+            <!-- ============ FATAL ERROR (bad/missing link) ============ -->
+            <div id="evalFatalError" class="hidden-element" style="background:#fff5f5; border:1px solid #fed7d7; color:#b91c1c; padding:18px; border-radius:12px; font-size:14px; line-height:1.5;"></div>
+
+            <!-- ============ STAFF NUMBER STEP ============ -->
+            <div class="form-group-full" id="evalStaffGateWrapper">
+                <label for="evalStaffNumberInput">Staff Number</label>
+                <input type="text" id="evalStaffNumberInput" placeholder="Enter your Staff Number">
+                <button type="button" class="btn-register" id="evalStaffGateContinueBtn" style="width:auto; padding:10px 26px; margin-top:12px;">Continue</button>
+                <p id="evalStaffGateMessage" class="hidden-element" style="margin-top:10px; padding:12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:10px; color:#991B1B; font-weight:600; font-size:13px;"></p>
+            </div>
+
+            <!-- ============ ALREADY COMPLETED ============ -->
+            <div class="form-group-full hidden-element" id="evalAlreadyDoneNotice" style="padding:14px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; color:#166534; font-weight:600; font-size:14px;">
+                You've already completed this evaluation. Thank you!
+            </div>
+
+            <!-- ============ CONTENT VIEWER (optional, between questions) ============ -->
+            <div class="form-group-full hidden-element" id="evalContentViewer" style="padding:18px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px;">
+                <div id="evalContentIndicator" style="font-size:12.5px; font-weight:700; color:#64748b; margin-bottom:10px;"></div>
+                <h3 id="evalContentTitle" class="hidden-element" style="margin:0 0 10px; font-size:17px; font-weight:800; color:var(--text-dark);"></h3>
+                <p id="evalContentBody" style="margin:0; white-space:pre-wrap; line-height:1.6; color:var(--text-dark);"></p>
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <button type="button" class="btn-register hidden-element" id="evalContentPrevBtn" style="flex:none; width:auto; padding:10px 22px; background:white; color:#64748b; border:2px solid #e2e8f0;">Previous</button>
+                    <button type="button" class="btn-register hidden-element" id="evalContentNextBtn" style="flex:none; width:auto; padding:10px 26px;">Next</button>
+                    <button type="button" class="btn-register hidden-element" id="evalContentContinueBtn" style="flex:none; width:auto; padding:10px 26px;">Continue</button>
+                </div>
+            </div>
+
+            <!-- ============ QUESTIONS FORM ============ -->
+            <div class="form-group-full hidden-element" id="evalQuestionsWrapper">
+                <!-- This page's custom title (activity_evaluations.page_titles),
+                     set per page in Create Evaluation — hidden when the current
+                     page has no title. See updateEvalPageHeading() in
+                     js/evaluation-public.js. -->
+                <div class="hidden-element reg-page-heading-banner" id="evalPageHeadingWrapper" style="margin-bottom:16px;">
+                    <h3 id="evalPageHeading"></h3>
+                </div>
+                <div id="evalQuestionsContainer"></div>
+                <p id="evalSubmitError" class="hidden-element" style="margin-top:10px; padding:12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:10px; color:#991B1B; font-weight:600; font-size:13px;"></p>
+
+                <!-- ============ PAGE NAVIGATION ============ -->
+                <!-- Shown only when this evaluation's questions span more
+                     than one page (see the "Page" number on each question in
+                     Create Evaluation) — Previous/Next walk between pages of
+                     questions; Submit only appears on the last page. See
+                     buildEvalPageSegments()/goToEvalPage() in js/evaluation-public.js. -->
+                <div class="hidden-element" id="evalPageNavContainer" style="display:flex; gap:10px; margin-top:18px;">
+                    <button type="button" class="btn-register hidden-element" id="evalPagePrevBtn" style="flex:none; width:auto; padding:10px 22px; background:white; color:#64748b; border:2px solid #e2e8f0;">Previous</button>
+                    <button type="button" class="btn-register hidden-element" id="evalPageNextBtn" style="flex:none; width:auto; padding:10px 26px;">Next</button>
+                </div>
+
+                <button type="button" class="btn-register hidden-element" id="evalSubmitBtn" style="margin-top:18px;">Submit</button>
+            </div>
+
+        </div>
+    </section>
+</div>
+
+<!-- ============ SUCCESS MODAL (centered, overlays the whole page) ============ -->
+<div class="form-modal-overlay hidden-element" id="evalSuccessOverlay">
+    <div class="form-modal-card" style="max-width:420px; text-align:center;">
+        <div style="font-size:46px; line-height:1; color:#16a34a; margin-bottom:14px;">✓</div>
+        <p style="font-weight:700; font-size:16px; color:#166534; margin:0 0 24px;">Thank you — your answers have been submitted.</p>
+        <button type="button" class="btn-register" id="evalSuccessCloseBtn" style="width:auto; padding:10px 34px;">Close</button>
+    </div>
+</div>
+
+<script type="module" src="js/evaluation-public.js?v=5"></script>
+</body>
+</html>
