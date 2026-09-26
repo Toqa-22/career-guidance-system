@@ -1,0 +1,129 @@
+/* Base KPI tile styles (normally come from Workshops' admin.css, which
+   Training doesn't load) — copied here so the KPI grid below renders
+   correctly on its own. */
+.dashboard-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 18px; margin-bottom: 28px;
+}
+.stat-tile {
+    background: white; border-radius: 20px; padding: 22px 24px;
+    box-shadow: 0 4px 16px rgba(17,17,17,.05); border-top: 3px solid var(--tile-color, #7C3AED);
+}
+.stat-tile-number { font-size: 32px; font-weight: 800; color: #111111; line-height: 1; margin-bottom: 6px; }
+.stat-tile-label { font-size: 13px; color: #64748b; font-weight: 600; }
+
+.home-welcome-header {
+    position: relative; overflow: hidden; border-radius: 18px; padding: 22px 26px; margin-bottom: 22px;
+    background: linear-gradient(120deg, var(--primary-dark, #3B0764) 0%, var(--primary, #7C3AED) 100%);
+    transition: background 1s ease;
+}
+.home-welcome-text { position: relative; z-index: 2; color: white; font-weight: 800; font-size: 16px; margin: 0; }
+.home-welcome-shape { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.15); pointer-events: none; z-index: 1; }
+.home-welcome-shape-1 { width: 110px; height: 110px; top: -50px; left: 10%; animation: homeWelcomeFloat1 7s ease-in-out infinite; }
+.home-welcome-shape-2 { width: 70px; height: 70px; bottom: -35px; right: 20%; background: rgba(255,255,255,0.1); animation: homeWelcomeFloat2 6s ease-in-out infinite; }
+.home-welcome-shape-3 { width: 50px; height: 50px; top: 20%; left: 30%; animation: homeWelcomeFloat3 8s ease-in-out infinite; }
+@keyframes homeWelcomeFloat1 { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(25px, 15px); } }
+@keyframes homeWelcomeFloat2 { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-20px, -10px); } }
+@keyframes homeWelcomeFloat3 { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-15px, 10px) scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .home-welcome-shape { animation: none; } }
+.chart-page-heading { margin-bottom: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.chart-page-heading h1 { font-size: 28px; color: #0f172a; margin-bottom: 4px; }
+.chart-page-heading p { color: #64748b; font-size: 13.5px; }
+.dashboard-print-btn {
+    background: white; border: 1px solid var(--primary-light, #DDD6FE); color: var(--primary, #7C3AED);
+    padding: 11px 20px; border-radius: 12px; font-weight: 800; font-size: 13.5px; cursor: pointer;
+    font-family: inherit; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.05);
+}
+.dashboard-print-btn:hover { background: var(--primary-light, #F5F3FF); }
+
+
+.chart-card { background: white; border-radius: 22px; padding: 24px; box-shadow: 0 10px 30px rgba(0, 0, 0, .08); }
+
+/* ===== Filters ===== */
+.chart-filters-card { margin-bottom: 22px; }
+.chart-filters-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; }
+.chart-filter-group { display: flex; flex-direction: column; gap: 6px; min-width: 180px; }
+.chart-filter-group label { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .02em; }
+.chart-filter-group select, .chart-filter-group input[type="date"] {
+    padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 13.5px;
+    font-family: inherit; background: white; min-width: 170px;
+}
+.chart-filter-group select:focus, .chart-filter-group input:focus { outline: none; border-color: var(--dynamic-primary, #7C3AED); }
+.chart-custom-date-inputs { display: flex; gap: 8px; }
+.chart-custom-date-inputs input { min-width: 130px; }
+
+/* ===== KPI cards ===== */
+.chart-kpi-grid { margin-bottom: 22px; }
+.stat-tile-delta { font-size: 12px; font-weight: 700; margin-top: 6px; }
+.stat-tile-delta.up { color: #10B981; }
+.stat-tile-delta.down { color: #EF4444; }
+.stat-tile-delta.flat { color: #94a3b8; }
+.stat-tile.chart-tile-loading .stat-tile-number { color: #cbd5e1; }
+.stat-tile.chart-tile-error { border-top-color: #EF4444 !important; }
+.stat-tile.chart-tile-error .stat-tile-number { font-size: 15px; color: #EF4444; }
+
+/* ===== Today's Hall Reservations ===== */
+.chart-today-card { margin-bottom: 22px; }
+.chart-today-empty { color: #94a3b8; font-size: 13px; padding: 10px 0; }
+.chart-today-list { display: flex; flex-direction: column; gap: 10px; }
+.chart-today-item {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+    padding: 12px 14px; border-radius: 10px; background: #fafafa; border-left: 3px solid var(--dynamic-primary, #7C3AED);
+    font-size: 13px; color: #334155;
+}
+.chart-today-item.chart-today-item-library { border-left-color: #10B981; }
+.chart-today-item strong { color: #0f172a; }
+.chart-today-item .chart-today-time { font-weight: 800; color: var(--dynamic-primary, #7C3AED); }
+.chart-today-item.chart-today-item-library .chart-today-time { color: #10B981; }
+
+/* ===== Charts grid ===== */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 22px; }
+.chart-grid-single { grid-template-columns: 1fr; }
+.chart-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.chart-card-header h3 { font-size: 15.5px; color: #0f172a; }
+.chart-card-subtitle { font-size: 11.5px; color: #94a3b8; font-weight: 700; }
+.chart-canvas-wrap { position: relative; height: 280px; }
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+.chart-split-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-split-half { position: relative; }
+.chart-split-half .chart-canvas-wrap { height: 220px; }
+
+/* ===== Gauge (half-doughnut + centered text, plain Chart.js — no plugin) ===== */
+.chart-gauge-wrap { display: flex; align-items: flex-end; justify-content: center; }
+.chart-gauge-label { position: absolute; bottom: 38%; left: 0; right: 0; text-align: center; pointer-events: none; }
+.chart-gauge-label .chart-gauge-value { font-size: 34px; font-weight: 800; color: #0f172a; line-height: 1; }
+.chart-gauge-label .chart-gauge-caption { font-size: 11.5px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+
+/* ===== Funnel (plain CSS bars, no chart library needed) ===== */
+.chart-funnel-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0 16px; min-height: 240px; justify-content: center; }
+.chart-funnel-stage { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.chart-funnel-bar {
+    height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 800; font-size: 14px; transition: width 0.3s ease;
+}
+.chart-funnel-caption { font-size: 11.5px; color: #64748b; font-weight: 700; }
+.chart-funnel-drop { font-size: 10.5px; color: #94a3b8; }
+
+/* Loading / empty / error overlays for each chart. Sits over the canvas so a
+   failed/empty chart never looks like a blank rendering bug. */
+.chart-state-overlay {
+    position: absolute; inset: 0; margin-top: 60px; display: none; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; font-size: 13px; color: #94a3b8; flex-direction: column; gap: 10px;
+}
+.chart-card { position: relative; }
+.chart-state-overlay.is-visible { display: flex; }
+.chart-state-overlay.is-error { color: #EF4444; }
+.chart-state-overlay .chart-retry-btn {
+    background: var(--dynamic-light1, #F5F3FF); color: var(--dynamic-primary, #7C3AED); border: 1px solid var(--dynamic-light3, #DDD6FE); border-radius: 8px;
+    padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.chart-state-overlay .chart-spinner {
+    width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--dynamic-light2, #EDE9FE); border-top-color: var(--dynamic-primary, #7C3AED);
+    animation: chartSpinnerTurn 0.7s linear infinite;
+}
+@keyframes chartSpinnerTurn { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+    .chart-grid { grid-template-columns: 1fr; }
+    .chart-split-two { grid-template-columns: 1fr; }
+}
