@@ -1330,11 +1330,31 @@ function buildEvalAnswerLines(value) {
 // (so an option nobody picked still shows up as 0 instead of vanishing from
 // the chart) while still picking up any value that isn't one of the defined
 // options (falls back to whatever values actually occur).
+// "No Answer" is the placeholder used to backfill responses whose real
+// answer was lost to a since-fixed bug (see sql/repair-orphaned-evaluation-
+// answers.sql and evaluation-public.js's answers-insert error handling) —
+// it is not a real choice anyone made, so every tally below treats it
+// exactly like no value at all: excluded from percentages, response
+// counts, and text-answer tables, rather than shown as its own category.
+const EVAL_NO_ANSWER_PLACEHOLDER = 'No Answer';
+
+// True only for an answer_value that reflects something the respondent
+// actually chose/wrote — used for the "Total Responses: N" badge and the
+// text-answer tables, so the "No Answer" placeholder doesn't inflate either
+// (a grid answer is only "real" if at least one of its rows isn't the
+// placeholder; a plain value is real if it isn't empty or the placeholder).
+function isRealEvalAnswer(v) {
+    if (v === null || v === undefined || v === '' || v === EVAL_NO_ANSWER_PLACEHOLDER) return false;
+    if (Array.isArray(v)) return v.some(x => x && x !== EVAL_NO_ANSWER_PLACEHOLDER);
+    if (typeof v === 'object') return Object.values(v).some(x => x && x !== EVAL_NO_ANSWER_PLACEHOLDER);
+    return true;
+}
+
 function tallyEvalOptions(values, definedOptions) {
     const counts = new Map();
     (Array.isArray(definedOptions) && definedOptions.length ? definedOptions : [...new Set(values)]).forEach(o => counts.set(o, 0));
     values.forEach(v => {
-        if (v === null || v === undefined || v === '') return;
+        if (v === null || v === undefined || v === '' || v === EVAL_NO_ANSWER_PLACEHOLDER) return;
         counts.set(v, (counts.get(v) || 0) + 1);
     });
     return counts;
@@ -1411,7 +1431,7 @@ function buildEvalQuestionChartConfig(question, answerValues) {
         const flatValues = answerValues.flat();
         const counts = tallyEvalOptions(flatValues, options);
         const labels = [...counts.keys()];
-        const totalRespondents = answerValues.filter(v => Array.isArray(v) ? v.length > 0 : !!v).length;
+        const totalRespondents = answerValues.filter(v => Array.isArray(v) ? v.some(x => x && x !== EVAL_NO_ANSWER_PLACEHOLDER) : (!!v && v !== EVAL_NO_ANSWER_PLACEHOLDER)).length;
         return {
             type: 'bar',
             data: {
@@ -1452,28 +1472,18 @@ function buildEvalQuestionChartConfig(question, answerValues) {
                 if (!countsByRowCol.has(row)) countsByRowCol.set(row, new Map());
                 const rowMap = countsByRowCol.get(row);
                 (Array.isArray(val) ? val : [val]).forEach(v => {
-                    if (!v) return;
+                    // The "No Answer" placeholder (backfilled for responses
+                    // whose real answer was lost — see sql/repair-orphaned-
+                    // evaluation-answers.sql) is excluded here, same as a
+                    // genuinely empty value: these questions are mandatory,
+                    // so it isn't a real rating anyone chose and shouldn't
+                    // appear as one in the chart or its response counts.
+                    if (!v || v === EVAL_NO_ANSWER_PLACEHOLDER) return;
                     rowMap.set(v, (rowMap.get(v) || 0) + 1);
                 });
             });
         });
-        // A value that doesn't match any of the question's defined columns
-        // (e.g. the "No Answer" placeholder used for responses whose real
-        // answer was lost — see sql/repair-orphaned-evaluation-answers.sql's
-        // history) still gets tallied into countsByRowCol above, but was
-        // previously invisible: the dataset loop below only ever drew a bar
-        // segment per DEFINED column, so that count just silently vanished
-        // from the chart. Collecting those extra values here and appending
-        // them as their own column (distinct grey, not part of the palette
-        // used for real rating options) makes them show up honestly instead
-        // of making the chart look emptier than it should.
-        const extraCols = [];
-        countsByRowCol.forEach(rowMap => {
-            rowMap.forEach((_, col) => {
-                if (!cols.includes(col) && !extraCols.includes(col)) extraCols.push(col);
-            });
-        });
-        const allCols = [...cols, ...extraCols];
+        const allCols = cols;
         // True horizontal stacked bar: each grid QUESTION (row) is a
         // category on the Y axis, and its bar is split into colored
         // segments — one per response option — running along the X axis.
@@ -1491,7 +1501,7 @@ function buildEvalQuestionChartConfig(question, answerValues) {
                 datasets: allCols.map((col, i) => ({
                     label: reshapeArabicForPdf(col),
                     data: rows.map(r => countsByRowCol.get(r)?.get(col) || 0),
-                    backgroundColor: i < cols.length ? EVAL_CHART_PALETTE[i % EVAL_CHART_PALETTE.length] : '#B5B2C4',
+                    backgroundColor: EVAL_CHART_PALETTE[i % EVAL_CHART_PALETTE.length],
                     borderRadius: 3, borderSkipped: false,
                     maxBarThickness: 32, categoryPercentage: 0.72, barPercentage: 0.82
                 }))
@@ -1616,7 +1626,7 @@ window.generateEvaluationReportPdf = async function () {
             // Same "how many of this question's answers are non-empty"
             // count the free-text fallback always used — just also shown as
             // a badge for every question type now, not only Text/Date/Time.
-            const responseCount = answerValues.filter(v => v !== null && v !== undefined && v !== '').length;
+            const responseCount = answerValues.filter(isRealEvalAnswer).length;
             const isPie = !!chartConfig && chartConfig.type === 'pie';
 
             doc.setFont('Amiri', 'normal');
@@ -1722,7 +1732,7 @@ window.generateEvaluationReportPdf = async function () {
             if (question.question_type !== 'text') return;
 
             const text = a.answer_value === null || a.answer_value === undefined ? '' : String(a.answer_value).trim();
-            if (!text) return;
+            if (!text || text === EVAL_NO_ANSWER_PLACEHOLDER) return;
             if (!textAnswersByQuestion.has(question.id)) {
                 textAnswersByQuestion.set(question.id, { question, answers: [] });
             }
