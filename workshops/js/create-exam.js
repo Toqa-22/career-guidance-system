@@ -821,10 +821,22 @@ async function pushExamQuestions(examId) {
     // would still show "Exam updated successfully" even though nothing
     // actually saved. That's exactly the "I changed a question and saved,
     // but it still shows the old answer" symptom this was fixed for.
+    //
+    // Kept rows are saved with a plain UPDATE per row, NOT .upsert() —
+    // activity_exam_questions.id is `generated always as identity`, and
+    // upsert's underlying INSERT...ON CONFLICT statement still tries to
+    // insert the explicit id value we pass, which Postgres flatly rejects
+    // for a GENERATED ALWAYS identity column ("cannot insert a non-DEFAULT
+    // value into column \"id\"") — regardless of the ON CONFLICT clause. A
+    // plain UPDATE never inserts anything, so it isn't affected by that
+    // restriction at all.
     if (keptRows.length > 0) {
-        const { error: upsertErr } = await client.from('activity_exam_questions')
-            .upsert(keptRows.map(r => ({ ...r, exam_id: examId })), { onConflict: 'id' });
-        if (upsertErr) throw new Error('Saving question changes failed: ' + upsertErr.message);
+        const results = await Promise.all(keptRows.map(r => {
+            const { id, ...fields } = r;
+            return client.from('activity_exam_questions').update(fields).eq('id', id);
+        }));
+        const failed = results.find(r => r.error);
+        if (failed) throw new Error('Saving question changes failed: ' + failed.error.message);
     }
     if (newRows.length > 0) {
         const { error: insErr } = await client.from('activity_exam_questions')
