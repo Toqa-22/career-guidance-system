@@ -580,21 +580,37 @@ async function pushEvalQuestions(evaluationId) {
 
     let deleteQuery = client.from('activity_evaluation_questions').delete().eq('evaluation_id', evaluationId);
     if (keptIds.length > 0) deleteQuery = deleteQuery.not('id', 'in', `(${keptIds.join(',')})`);
-    await deleteQuery;
+    const { error: delErr } = await deleteQuery;
+    if (delErr) throw new Error('Removing old questions failed: ' + delErr.message);
 
+    // Kept rows are saved with a plain UPDATE per row, NOT .upsert() —
+    // activity_evaluation_questions.id is `generated always as identity`,
+    // and upsert's underlying INSERT...ON CONFLICT statement still tries to
+    // insert the explicit id value we pass, which Postgres flatly rejects
+    // for a GENERATED ALWAYS identity column ("cannot insert a non-DEFAULT
+    // value into column \"id\"") regardless of the ON CONFLICT clause — this
+    // was silently failing every edit to an existing question (text, type,
+    // options, page) since there was previously no error-checking here
+    // either. A plain UPDATE never inserts anything, so it's unaffected.
     if (keptRows.length > 0) {
-        await client.from('activity_evaluation_questions')
-            .upsert(keptRows.map(r => ({ ...r, evaluation_id: evaluationId })), { onConflict: 'id' });
+        const results = await Promise.all(keptRows.map(r => {
+            const { id, ...fields } = r;
+            return client.from('activity_evaluation_questions').update(fields).eq('id', id);
+        }));
+        const failed = results.find(r => r.error);
+        if (failed) throw new Error('Saving question changes failed: ' + failed.error.message);
     }
     if (newRows.length > 0) {
-        await client.from('activity_evaluation_questions')
+        const { error: insErr } = await client.from('activity_evaluation_questions')
             .insert(newRows.map(r => ({ ...r, evaluation_id: evaluationId })));
+        if (insErr) throw new Error('Saving new questions failed: ' + insErr.message);
     }
     return rows.length;
 }
 
 async function pushEvalContents(evaluationId) {
-    await client.from('activity_evaluation_contents').delete().eq('evaluation_id', evaluationId);
+    const { error: delErr } = await client.from('activity_evaluation_contents').delete().eq('evaluation_id', evaluationId);
+    if (delErr) throw new Error('Removing old page content failed: ' + delErr.message);
 
     const rows = evalContents
         .filter(c => (c.content || '').trim())
@@ -607,7 +623,8 @@ async function pushEvalContents(evaluationId) {
         }));
 
     if (rows.length > 0) {
-        await client.from('activity_evaluation_contents').insert(rows);
+        const { error: insErr } = await client.from('activity_evaluation_contents').insert(rows);
+        if (insErr) throw new Error('Saving page content failed: ' + insErr.message);
     }
 }
 
@@ -696,6 +713,12 @@ async function handleFormSubmission(e) {
             alert('Evaluation created successfully.');
             window.location.href = 'evaluations-dashboard.html';
         }
+    } catch (err) {
+        // pushEvalQuestions/pushEvalContents now throw instead of failing
+        // silently (see their comments) — this is what actually surfaces
+        // that failure to you, instead of showing "updated successfully"
+        // while nothing was really saved.
+        alert('Could not save: ' + err.message);
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save';
