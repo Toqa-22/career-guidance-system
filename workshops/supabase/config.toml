@@ -1,0 +1,22 @@
+# Supabase project config for Edge Functions.
+#
+# All 5 functions here are called by anonymous participants or the admin
+# page — none of them are logged into Supabase Auth — so JWT verification
+# must stay off for all of them. Without this, Supabase rejects even the
+# browser's CORS preflight (OPTIONS) request before your function code ever
+# runs, which shows up as a confusing CORS error rather than a clear 401.
+
+[functions.check-registration]
+verify_jwt = false
+
+[functions.verify-certificate]
+verify_jwt = false
+
+[functions.generate-certificate]
+verify_jwt = false
+
+[functions.get-my-data]
+verify_jwt = false
+
+[functions.list-certificates]
+verify_jwt = false
