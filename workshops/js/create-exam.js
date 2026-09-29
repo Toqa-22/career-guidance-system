@@ -812,21 +812,31 @@ async function pushExamQuestions(examId) {
 
     let deleteQuery = client.from('activity_exam_questions').delete().eq('exam_id', examId);
     if (keptIds.length > 0) deleteQuery = deleteQuery.not('id', 'in', `(${keptIds.join(',')})`);
-    await deleteQuery;
+    const { error: delErr } = await deleteQuery;
+    if (delErr) throw new Error('Removing old questions failed: ' + delErr.message);
 
+    // Every write below is error-checked and THROWS on failure — previously
+    // these were fire-and-forget, so a rejected write (a bad value, a
+    // constraint, anything) failed completely silently: handleFormSubmission
+    // would still show "Exam updated successfully" even though nothing
+    // actually saved. That's exactly the "I changed a question and saved,
+    // but it still shows the old answer" symptom this was fixed for.
     if (keptRows.length > 0) {
-        await client.from('activity_exam_questions')
+        const { error: upsertErr } = await client.from('activity_exam_questions')
             .upsert(keptRows.map(r => ({ ...r, exam_id: examId })), { onConflict: 'id' });
+        if (upsertErr) throw new Error('Saving question changes failed: ' + upsertErr.message);
     }
     if (newRows.length > 0) {
-        await client.from('activity_exam_questions')
+        const { error: insErr } = await client.from('activity_exam_questions')
             .insert(newRows.map(r => ({ ...r, exam_id: examId })));
+        if (insErr) throw new Error('Saving new questions failed: ' + insErr.message);
     }
     return rows.length;
 }
 
 async function pushExamContents(examId) {
-    await client.from('activity_exam_contents').delete().eq('exam_id', examId);
+    const { error: delErr } = await client.from('activity_exam_contents').delete().eq('exam_id', examId);
+    if (delErr) throw new Error('Removing old page content failed: ' + delErr.message);
 
     const rows = examContents
         .filter(c => (c.content || '').trim())
@@ -839,7 +849,8 @@ async function pushExamContents(examId) {
         }));
 
     if (rows.length > 0) {
-        await client.from('activity_exam_contents').insert(rows);
+        const { error: insErr } = await client.from('activity_exam_contents').insert(rows);
+        if (insErr) throw new Error('Saving page content failed: ' + insErr.message);
     }
 }
 
@@ -940,6 +951,12 @@ async function handleFormSubmission(e) {
             alert('Exam created successfully.');
             window.location.href = 'exam-dashboard.html';
         }
+    } catch (err) {
+        // pushExamQuestions/pushExamContents now throw instead of failing
+        // silently (see their comments) — this is what actually surfaces
+        // that failure to you, instead of showing "updated successfully"
+        // while nothing was really saved.
+        alert('Could not save: ' + err.message);
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save';
