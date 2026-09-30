@@ -129,6 +129,11 @@ function renderTable() {
         const correctCell = a.effectiveStatus === 'Submitted'
             ? `<button type="button" class="btn-tbl-edit" data-correct-id="${a.id}" data-staff="${escapeHtml(a.staff_number).replace(/"/g, '&quot;')}" data-name="${escapeHtml(a.staff_name || '').replace(/"/g, '&quot;')}">Correct</button>`
             : '';
+        // Available on every row regardless of status (unlike Allow Retake,
+        // which only makes sense once there's something to retake) — this is
+        // a plain "remove this participant's record entirely" action, for
+        // when a row was created by mistake or needs to be cleaned up.
+        const deleteCell = `<button type="button" class="btn-tbl-delete" data-delete-id="${a.id}" data-staff="${escapeHtml(a.staff_number).replace(/"/g, '&quot;')}" data-name="${escapeHtml(a.staff_name || '').replace(/"/g, '&quot;')}">Delete</button>`;
 
         return `
             <tr>
@@ -139,7 +144,7 @@ function renderTable() {
                 <td>${pct}</td>
                 <td><span style="display:inline-block; padding:3px 10px; border-radius:999px; border:1px solid; font-weight:700; font-size:11.5px; ${statusStyle}">${a.effectiveStatus}</span></td>
                 <td>${a.submitted_at ? new Date(a.submitted_at).toLocaleString() : '—'}</td>
-                <td class="action-cell">${correctCell}${retakeCell}</td>
+                <td class="action-cell">${correctCell}${retakeCell}${deleteCell}</td>
             </tr>
         `;
     }).join('');
@@ -152,6 +157,14 @@ function renderTable() {
         ));
     });
 
+    document.querySelectorAll('[data-delete-id]').forEach(btn => {
+        btn.addEventListener('click', () => deleteParticipant(
+            btn.getAttribute('data-delete-id'),
+            btn.getAttribute('data-staff'),
+            btn.getAttribute('data-name')
+        ));
+    });
+
     document.querySelectorAll('[data-correct-id]').forEach(btn => {
         btn.addEventListener('click', () => openCorrectionPanel(
             btn.getAttribute('data-correct-id'),
@@ -159,6 +172,52 @@ function renderTable() {
             btn.getAttribute('data-name')
         ));
     });
+}
+
+// ============================================================================
+// Delete — removes one participant's attempt (and its answers) from this
+// exam entirely, with a required reason, same two-step reason-then-confirm
+// pattern as everywhere else destructive in this codebase. Unlike Allow
+// Retake, this is offered on every row regardless of status — it's for
+// cleaning up a mistaken/unwanted record, not specifically for letting the
+// staff number try again (though as a side effect, it does also free that
+// staff number to attempt the exam again, since the same unique-index rule
+// applies either way). Who deleted it and why is logged to the Deletion Log
+// page, same as every other delete in this app.
+// ============================================================================
+async function deleteParticipant(attemptId, staffNumber, staffName) {
+    try {
+        if (typeof formCard !== 'function' || typeof confirmCard !== 'function') {
+            alert('This page needs a fresh copy of a required file — please hard-refresh (Ctrl+Shift+R) and try again.');
+            return;
+        }
+
+        const who = staffName ? `${staffName} (${staffNumber})` : staffNumber;
+        const result = await formCard('Delete Participant', [
+            { name: 'reason', label: `Why are you deleting ${who}'s record for this exam?`, placeholder: 'Reason for deletion' }
+        ], { okLabel: 'Continue' });
+        if (!result) return;
+        if (!result.reason) { alert('Please enter a reason.'); return; }
+        if (!(await confirmCard(`This permanently deletes ${who}'s attempt and answers for this exam. This cannot be undone. Continue?`))) return;
+
+        const { error: delErr } = await client.from('activity_exam_attempts').delete().eq('id', attemptId);
+        if (delErr) {
+            alert('Could not delete: ' + delErr.message);
+            return;
+        }
+
+        await client.from('deletion_audit_log').insert({
+            admin_username: currentAdminName(),
+            entity_type: 'exam_attempt',
+            entity_label: `${examInfo ? examInfo.title : 'Exam'} — ${who}`,
+            reason: result.reason
+        });
+
+        alert('Participant deleted.');
+        loadParticipants();
+    } catch (err) {
+        alert('Something went wrong: ' + err.message);
+    }
 }
 
 // ============================================================================
