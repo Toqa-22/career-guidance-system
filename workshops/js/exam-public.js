@@ -466,7 +466,9 @@ async function startSolveMode() {
     }
 
     if (attempt && attempt.status === 'submitted') {
+        document.getElementById('examAlreadyDoneNotice').textContent = "You've already completed this exam — taking you back to registration…";
         document.getElementById('examAlreadyDoneNotice').classList.remove('hidden-element');
+        goToRegistrationAfterSuccess();
         return;
     }
 
@@ -557,8 +559,9 @@ function startCountdown(expiresAtMs) {
                 submitExamAttempt(currentAttempt, collectExamAnswers(), true).then(() => {
                     document.getElementById('examQuestionsWrapper').classList.add('hidden-element');
                     document.getElementById('examSuccessOverlay').classList.add('hidden-element');
-                    document.getElementById('examAlreadyDoneNotice').textContent = "Time's up — your exam was submitted automatically with whatever you had answered.";
+                    document.getElementById('examAlreadyDoneNotice').textContent = "Time's up — your exam was submitted automatically with whatever you had answered. Taking you back to registration…";
                     document.getElementById('examAlreadyDoneNotice').classList.remove('hidden-element');
+                    goToRegistrationAfterSuccess();
                 });
             }
             return;
@@ -627,6 +630,7 @@ document.getElementById('examSubmitBtn').addEventListener('click', async () => {
         document.getElementById('examQuestionsWrapper').classList.add('hidden-element');
         document.getElementById('examCountdownWrapper').classList.add('hidden-element');
         document.getElementById('examSuccessOverlay').classList.remove('hidden-element');
+        goToRegistrationAfterSuccess();
     } catch (err) {
         document.getElementById('examSubmitError').textContent = 'Something went wrong submitting your answers. Please try again.';
         document.getElementById('examSubmitError').classList.remove('hidden-element');
@@ -637,10 +641,32 @@ document.getElementById('examSubmitBtn').addEventListener('click', async () => {
     }
 });
 
-// Best-effort tab close, same as js/evaluation-public.js's evalSuccessCloseBtn.
+// The whole point of this exam is that it sits in front of registration
+// (js/workshops.js's gate only ever sends someone here with mode=solve when
+// their registration is blocked on it) — so once they've submitted, the
+// natural next step is straight back into the registration form for the
+// same activity, already past the staff-number step, not a dead end they
+// have to navigate away from manually. register.html's own
+// applyDirectCourseLinkFromUrl()/applyStaffNumberFromUrl() already know how
+// to pick this straight back up from these two params alone: the course
+// stays locked to this activity and the staff number gate auto-continues,
+// landing exactly on the (now unblocked) registration form.
+function buildReturnToRegistrationUrl() {
+    const url = new URL('register.html', window.location.href);
+    url.searchParams.set('course', String(exam.course_id));
+    url.searchParams.set('staff', staffParam);
+    return url.toString();
+}
+
+function goToRegistrationAfterSuccess() {
+    const REDIRECT_DELAY_MS = 1800; // long enough to read "submitted", short enough to feel immediate
+    setTimeout(() => { window.location.href = buildReturnToRegistrationUrl(); }, REDIRECT_DELAY_MS);
+}
+
+// Manual "Continue to Registration" click jumps straight there instead of
+// waiting out the auto-redirect timer above.
 document.getElementById('examSuccessCloseBtn')?.addEventListener('click', () => {
-    window.close();
-    document.getElementById('examSuccessOverlay').classList.add('hidden-element');
+    window.location.href = buildReturnToRegistrationUrl();
 });
 
 init();
