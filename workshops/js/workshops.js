@@ -1544,11 +1544,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // ================================================================
             const staffNumberForExamCheck = matchedParticipant ? matchedParticipant.staff_number : enteredStaffNumberRaw;
             if (staffNumberForExamCheck) {
-                const { data: examForCourse } = await client
+                // A course can have more than one Exam attached (e.g. a
+                // Pre-test and a Post-test copied onto the same Activity) —
+                // .maybeSingle() errors out when more than one row matches,
+                // and that error used to go unchecked, so the gate silently
+                // skipped itself entirely for any course with 2+ exams. This
+                // fetches all of them and gates on whichever one actually
+                // has the flag on (there should normally be at most one, but
+                // this stays correct even if more than one is ever turned on).
+                const { data: examsForCourse } = await client
                     .from('activity_exams')
                     .select('id, public_slug, require_before_registration')
-                    .eq('course_id', courseId)
-                    .maybeSingle();
+                    .eq('course_id', courseId);
+                const examForCourse = (examsForCourse || []).find(e => e.require_before_registration) || null;
 
                 if (examForCourse && examForCourse.require_before_registration) {
                     const { data: examAttempt } = await client
