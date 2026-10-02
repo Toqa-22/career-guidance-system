@@ -75,6 +75,10 @@ const courseId = params.get('course_id');
 let currentRegistrationId = null;
 let currentStaffName = null;
 let currentStaffNumber = null;
+// Whether this registrant's OWN institution (as they chose it at
+// registration) is Ibra — see the two "Organized By" handlers below for
+// why this gates whether that step is allowed to touch institution_name_snapshot.
+let currentIsIbraParticipant = false;
 
 // The hero starts hidden (see the "theme-loading" class) so the visitor
 // never sees the default purple flash before the real course color loads —
@@ -252,16 +256,28 @@ document.getElementById('deptBackfillContinueBtn').addEventListener('click', asy
     btn.textContent = 'Please wait...';
 
     try {
-        const newSnapshot = `Ibra - ${dept}`;
-        const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
-        const { error: updateErr } = await client.from('registrations').update({
-            institution_name_snapshot: newSnapshot,
-            institution_id: matchingInst ? matchingInst.id : null,
-            // Marks this as done for good — this card never shows for
-            // this registration again after this, even for later entries.
-            department_chosen_via_log: true
-        }).eq('id', currentRegistrationId);
-        if (updateErr) throw updateErr;
+        // Only Ibra participants' institution gets rewritten to
+        // "Ibra - <department>" here — someone who registered as "Other"
+        // (a non-Ibra hospital/center) keeps their real institution exactly
+        // as they chose it; this backfill card only concerns which Ibra
+        // department ran their past sessions.
+        if (currentIsIbraParticipant) {
+            const newSnapshot = `Ibra - ${dept}`;
+            const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
+            const { error: updateErr } = await client.from('registrations').update({
+                institution_name_snapshot: newSnapshot,
+                institution_id: matchingInst ? matchingInst.id : null,
+                // Marks this as done for good — this card never shows for
+                // this registration again after this, even for later entries.
+                department_chosen_via_log: true
+            }).eq('id', currentRegistrationId);
+            if (updateErr) throw updateErr;
+        } else {
+            const { error: flagErr } = await client.from('registrations').update({
+                department_chosen_via_log: true
+            }).eq('id', currentRegistrationId);
+            if (flagErr) throw flagErr;
+        }
 
         document.getElementById('departmentBackfillCard').classList.add('hidden-element');
         document.getElementById('loggedForName').textContent = `Logging for: ${currentStaffName} (Staff #: ${currentStaffNumber})`;
@@ -306,7 +322,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         // Case-insensitive, same as certificate lookup and attendance check-in.
         const { data: reg, error: findErr } = await client
             .from('registrations')
-            .select('id, staff_name, staff_number, department_chosen_via_log')
+            .select('id, staff_name, staff_number, department_chosen_via_log, institution_name_snapshot')
             .eq('course_id', courseId)
             .ilike('staff_number', staffNumber)
             .maybeSingle();
@@ -332,6 +348,12 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         currentRegistrationId = reg.id;
         currentStaffName = reg.staff_name;
         currentStaffNumber = reg.staff_number;
+        // Ibra participants' own institution is always saved as
+        // "Ibra - <department>" at registration (see js/workshops.js) —
+        // anything else means they registered as "Other" (a non-Ibra
+        // hospital/center), whose real institution must never be
+        // overwritten by the "Organized By" step below.
+        currentIsIbraParticipant = (reg.institution_name_snapshot || '').startsWith('Ibra - ');
         document.getElementById('staffCheckCard').classList.add('hidden-element');
 
         // The department backfill card is a ONE-TIME step for people who
@@ -406,14 +428,27 @@ document.getElementById('addEntryBtn').addEventListener('click', async () => {
         // true here, so a brand new participant (who has nothing to
         // backfill and never sees that card) still counts correctly in
         // the "Courses per Department" report from their very first entry.
-        const newSnapshot = `Ibra - ${dept}`;
-        const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
-        const { error: regUpdateErr } = await client.from('registrations').update({
-            institution_name_snapshot: newSnapshot,
-            institution_id: matchingInst ? matchingInst.id : null,
-            department_chosen_via_log: true
-        }).eq('id', currentRegistrationId);
-        if (regUpdateErr) throw regUpdateErr;
+        //
+        // Only actually rewrites institution_name_snapshot for Ibra
+        // participants — someone who registered as "Other" keeps their
+        // real institution; the "Organized By" department is still saved
+        // on the entry row itself just below, which is all the Excel
+        // export's "Organized By" column and the entries list need.
+        if (currentIsIbraParticipant) {
+            const newSnapshot = `Ibra - ${dept}`;
+            const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
+            const { error: regUpdateErr } = await client.from('registrations').update({
+                institution_name_snapshot: newSnapshot,
+                institution_id: matchingInst ? matchingInst.id : null,
+                department_chosen_via_log: true
+            }).eq('id', currentRegistrationId);
+            if (regUpdateErr) throw regUpdateErr;
+        } else {
+            const { error: flagErr } = await client.from('registrations').update({
+                department_chosen_via_log: true
+            }).eq('id', currentRegistrationId);
+            if (flagErr) throw flagErr;
+        }
 
         // Always an INSERT — this is intentionally append-only. Previous
         // entries are never touched, so checking in again later just adds
