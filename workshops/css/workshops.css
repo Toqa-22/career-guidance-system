@@ -306,6 +306,15 @@ input:focus, select:focus { outline: none; border-color: var(--course-theme); }
 input:read-only {
     background-color: var(--course-theme-dark, #1e293b); color: #ffffff; border-color: var(--course-theme-dark, #1e293b); cursor: not-allowed;
 }
+/* A returning participant's saved profile fields (Name, Phone, Gender,
+   Designation, Current Post, Institution/Department, and whichever
+   targeting fields they already have a saved value for) — locked the same
+   way as the Staff Number field above once loaded from their participants
+   row (see workshops.js's lockProfileFieldsForReturningParticipant).
+   Selects can't be read-only, only disabled, so this covers both. */
+input:disabled, select:disabled {
+    background-color: var(--course-theme-dark, #1e293b); color: #ffffff; border-color: var(--course-theme-dark, #1e293b); cursor: not-allowed; opacity: 1;
+}
 .form-group-full { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 /* Same reasoning as .form-grid > * above — .form-group-full is itself a
    flex column (evaluation.html's #evalQuestionsWrapper isn't inside a CSS
