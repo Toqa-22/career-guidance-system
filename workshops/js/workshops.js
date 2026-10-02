@@ -231,6 +231,20 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
         ];
 
+        // Directorate, Type of Program, and Nature of Attendance describe
+        // THIS activity, not the participant permanently — the same person
+        // can attend one course in person from one directorate and another
+        // virtually from a different one. So unlike the rest of
+        // TARGETING_FIELDS, these three are never prefilled from a past
+        // registration, never locked, and never written to the
+        // participants table as a saved "profile" value — only kept as a
+        // per-registration snapshot (targetingSnapshotPayload /
+        // p_..._snapshot below), exactly like every other field on
+        // registrations itself. See prefillFromParticipant,
+        // lockProfileFieldsForReturningParticipant, and the participantFields
+        // object further down.
+        const PER_ACTIVITY_TARGETING_KEYS = ['directorate', 'program_type', 'attendance_nature'];
+
         // Parses courses.section_pages — which page each of the 8 targeting
         // fields, plus "documents" (Required Documents) and "allocations"
         // (Institutional Allocations / Chair Mapping, which has no
@@ -856,14 +870,18 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             handleDesignationChange();
 
             // Job Level, Nationality, Highest Educational Qualification,
-            // Experience Years, Organization, Directorate, Type of
-            // Program, Nature of Attendance — same graceful-degradation
+            // Experience Years, Organization — same graceful-degradation
             // rule as institution/department above: only set if this
             // course actually offers that value as an option (its
             // available options are course-specific, populated just
             // before this by updateTargetingSelectOptionsForCourse), left
             // blank for the participant to fill in themselves otherwise.
+            // Directorate, Type of Program, and Nature of Attendance are
+            // deliberately skipped here — they change per activity, so
+            // every registration starts them blank rather than carrying
+            // over whatever was picked for a previous course.
             TARGETING_FIELDS.forEach(field => {
+                if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
                 const select = document.getElementById('reg_' + field.key);
                 const savedValue = p[field.key];
                 if (select && savedValue && Array.from(select.options).some(o => o.value === savedValue)) {
@@ -920,8 +938,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // saved value for. One they've never been asked to supply
             // before is left open so they can fill it in for the first
             // time; it's then locked on every registration after that,
-            // same as the core fields above.
+            // same as the core fields above. Directorate, Type of Program,
+            // and Nature of Attendance are excluded — they describe this
+            // activity, not the participant, so they stay open and blank
+            // (never auto-filled from a past course) on every registration.
             TARGETING_FIELDS.forEach(field => {
+                if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
                 const select = document.getElementById('reg_' + field.key);
                 if (!select) return;
                 const savedValue = p[field.key];
@@ -2526,8 +2548,17 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         // out of targetingValues as an empty string, and
                         // blindly saving that would erase a value a PAST
                         // course's registration already captured).
+                        // Directorate, Type of Program, and Nature of
+                        // Attendance are never written to the participant's
+                        // saved profile here — they change per activity, so
+                        // "saving" one as this participant's fixed value
+                        // would be wrong the moment they attend a different
+                        // kind of activity. Each registration's own answer
+                        // is still captured below via targetingSnapshotPayload
+                        // / p_..._snapshot, same as before.
                         const targetingLabelByKey = {};
                         TARGETING_FIELDS.forEach(field => {
+                            if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
                             targetingLabelByKey[field.key] = field.label;
                             if (targetingValues[field.key]) participantFields[field.key] = targetingValues[field.key];
                         });
