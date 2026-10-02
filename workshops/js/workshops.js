@@ -2307,13 +2307,33 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         // department and marks it confirmed, so this
                         // first entry counts correctly in the "Courses
                         // per Department" report from the very start.
-                        const newSnapshot = `Ibra - ${firstLogDept}`;
-                        const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
-                        await client.from('registrations').update({
-                            institution_name_snapshot: newSnapshot,
-                            institution_id: matchingInst ? matchingInst.id : null,
-                            department_chosen_via_log: true
-                        }).eq('id', newReg.id);
+                        //
+                        // BUT this "Organized By" department is always an
+                        // Ibra department (same dropdown as Activity Log's),
+                        // and the Courses-per-Department report itself only
+                        // ever looks at registrations whose institution is
+                        // already "Ibra - %" (report.js). It has nothing to
+                        // do with the participant's OWN institution — this
+                        // was previously overwriting institution_name_snapshot
+                        // / institution_id unconditionally, which meant a
+                        // participant who had just chosen "Other" (a
+                        // non-Ibra hospital) as their own institution a few
+                        // fields above got that correct choice silently
+                        // replaced with "Ibra - <department>" the moment
+                        // they also filled in this section. Only apply the
+                        // override when the participant is actually Ibra
+                        // staff; for "Other" institution participants, just
+                        // record the log entry itself (below) and leave
+                        // their real institution exactly as they chose it.
+                        if (instType === 'Ibra') {
+                            const newSnapshot = `Ibra - ${firstLogDept}`;
+                            const { data: matchingInst } = await client.from('institutions').select('id').eq('name', newSnapshot).maybeSingle();
+                            await client.from('registrations').update({
+                                institution_name_snapshot: newSnapshot,
+                                institution_id: matchingInst ? matchingInst.id : null,
+                                department_chosen_via_log: true
+                            }).eq('id', newReg.id);
+                        }
 
                         // department was missing here — the entry's own
                         // "Organized By" choice (firstLogDept) was applied
