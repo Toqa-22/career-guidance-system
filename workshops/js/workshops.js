@@ -231,19 +231,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
         ];
 
-        // Directorate, Type of Program, and Nature of Attendance describe
-        // THIS activity, not the participant permanently — the same person
-        // can attend one course in person from one directorate and another
-        // virtually from a different one. So unlike the rest of
-        // TARGETING_FIELDS, these three are never prefilled from a past
-        // registration, never locked, and never written to the
-        // participants table as a saved "profile" value — only kept as a
-        // per-registration snapshot (targetingSnapshotPayload /
-        // p_..._snapshot below), exactly like every other field on
-        // registrations itself. See prefillFromParticipant,
-        // lockProfileFieldsForReturningParticipant, and the participantFields
-        // object further down.
-        const PER_ACTIVITY_TARGETING_KEYS = ['directorate', 'program_type', 'attendance_nature'];
+        // Type of Program and Nature of Attendance describe THIS activity,
+        // not the participant permanently — the same person can attend one
+        // course in person and another virtually. So unlike the rest of
+        // TARGETING_FIELDS (which includes Directorate — back to being a
+        // normal locked/saved profile field, same as Job Level, Nationality,
+        // etc.), these two are never prefilled from a past registration,
+        // never locked, and never written to the participants table as a
+        // saved "profile" value — only kept as a per-registration snapshot
+        // (targetingSnapshotPayload / p_..._snapshot below), exactly like
+        // every other field on registrations itself. See
+        // prefillFromParticipant, lockProfileFieldsForReturningParticipant,
+        // and the participantFields object further down.
+        const PER_ACTIVITY_TARGETING_KEYS = ['program_type', 'attendance_nature'];
 
         // Parses courses.section_pages — which page each of the 8 targeting
         // fields, plus "documents" (Required Documents) and "allocations"
