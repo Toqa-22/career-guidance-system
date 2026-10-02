@@ -872,19 +872,29 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             });
         }
 
-        // A participant's core personal/professional info is meant to be
-        // captured ONCE (at their very first-ever registration, under this
-        // staff number) and reused from then on — not retyped, and
-        // potentially drifted, on every later registration. For a staff
-        // number that already has a saved participants row, these fields
-        // get prefilled (prefillFromParticipant, above) and then locked
-        // here so the participant can only view them; correcting a mistake
-        // afterwards is an admin-only action (Participant Registrations /
+        // A participant's core personal/professional info is captured once
+        // per CALENDAR YEAR and reused for every registration within that
+        // year — not retyped (and potentially drifted) on every single
+        // registration, but also not frozen forever, since a department,
+        // designation, etc. can genuinely change year to year. participants
+        // .profile_year (sql/add-participant-profile-year.sql) records which
+        // year the saved fields were last confirmed for.
+        function isProfileCurrentForThisYear(p) {
+            return !!p && Number(p.profile_year) === new Date().getFullYear();
+        }
+
+        // For a staff number whose saved profile IS current for this year,
+        // these fields get prefilled (prefillFromParticipant, above) and
+        // then locked here so the participant can only view them; correcting
+        // a mistake is an admin-only action (Participant Registrations /
         // Edit Participant, js/students.js), never something done by
-        // re-registering. "Current Post" (specializationInput) and
-        // "Designation" are included since they're asked at every
-        // registration today but are meant to describe the participant
-        // themselves, same as the rest.
+        // re-registering. Once a new year starts, isProfileCurrentForThisYear
+        // goes false and these same fields are left editable (still
+        // prefilled with last year's values as a starting point) until
+        // they're saved again — see the profileRefreshNotice branch below.
+        // "Current Post" (specializationInput) and "Designation" are
+        // included since they're asked at every registration today but are
+        // meant to describe the participant themselves, same as the rest.
         const LOCKABLE_CORE_FIELD_IDS = [
             'staffName', 'phoneNumber', 'sexSelect', 'designationSelect',
             'otherDesignationInput', 'specializationInput',
@@ -937,6 +947,41 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 if (select) select.disabled = false;
             });
             document.getElementById('lockedProfileNotice').classList.add('hidden-element');
+            document.getElementById('profileRefreshNotice').classList.add('hidden-element');
+        }
+
+        // Shown instead of the lock for a returning participant whose
+        // profile_year is behind the current year — the fields themselves
+        // are left blank (clearProfileFieldsForYearRefresh, below) so they
+        // actually retype their info rather than rubber-stamp last year's,
+        // with this banner explaining why a "registered before" staff
+        // number is suddenly asking for everything again.
+        function showProfileRefreshNotice() {
+            document.getElementById('lockedProfileNotice').classList.add('hidden-element');
+            document.getElementById('profileRefreshNotice').classList.remove('hidden-element');
+        }
+
+        // Blanks every locked-when-current-year field for a returning
+        // participant whose profile_year has fallen behind — used instead
+        // of prefillFromParticipant so last year's answers are never handed
+        // back to them, forcing an actual re-entry rather than a review.
+        function clearProfileFieldsForYearRefresh() {
+            document.getElementById('staffName').value = '';
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('sexSelect').value = '';
+            document.getElementById('specializationInput').value = '';
+            document.getElementById('designationSelect').value = '';
+            document.getElementById('otherDesignationInput').value = '';
+            document.getElementById('institutionTypeSelect').value = '';
+            document.getElementById('departmentSelect').value = '';
+            document.getElementById('otherInstitutionInput').value = '';
+            resetOtherFreeText();
+            renderInstitutionFields();
+            handleDesignationChange();
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                if (select) select.value = '';
+            });
         }
 
         async function handleStaffGateContinue() {
@@ -1699,12 +1744,25 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // course-specific institution/designation dropdowns above are
             // ready to accept it — a brand-new (unmatched) staff number
             // just gets its typed value carried into the field instead.
-            // Either way, the field is locked here — it was already
-            // entered once at the Staff Number step; a typo gets fixed by
-            // going back via "Not you? Change staff number", not by
-            // editing it again down here.
+            // Either way, the Staff Number field itself is locked here — it
+            // was already entered once at the Staff Number step; a typo
+            // gets fixed by going back via "Not you? Change staff number",
+            // not by editing it again down here.
+            //
+            // The REST of the saved profile (name, phone, institution, ...)
+            // only gets prefilled when it's still current for this year
+            // (isProfileCurrentForThisYear) — once a new year starts, the
+            // point is to make them actually type their info again (it may
+            // well have changed), not hand back last year's answers to
+            // rubber-stamp. The fields are simply left blank for the
+            // participant to fill in from scratch, exactly like a brand-new
+            // staff number, until they save again and re-lock for the year.
             if (matchedParticipant) {
-                prefillFromParticipant(matchedParticipant);
+                if (isProfileCurrentForThisYear(matchedParticipant)) {
+                    prefillFromParticipant(matchedParticipant);
+                } else {
+                    clearProfileFieldsForYearRefresh();
+                }
                 document.getElementById('staffNumber').value = matchedParticipant.staff_number;
             } else {
                 document.getElementById('staffNumber').value = enteredStaffNumberRaw;
@@ -1763,11 +1821,13 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // ...) course-filtered option lists — locking any earlier would
             // just be undone the moment those options get rebuilt. A
             // brand-new (unmatched) staff number stays fully editable, same
-            // as always.
-            if (matchedParticipant) {
+            // as always; a returning one only locks if their profile is
+            // still current for THIS year (see isProfileCurrentForThisYear).
+            if (matchedParticipant && isProfileCurrentForThisYear(matchedParticipant)) {
                 lockProfileFieldsForReturningParticipant(matchedParticipant);
             } else {
                 unlockProfileFields();
+                if (matchedParticipant) showProfileRefreshNotice();
             }
         }
 
@@ -2451,7 +2511,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                             designation_category: designationCategory,
                             specialization: specialization,
                             institution_id: resolvedInstitutionId,
-                            institution_name: institutionSnapshotString
+                            institution_name: institutionSnapshotString,
+                            // Stamps which calendar year these fields were
+                            // just confirmed for — isProfileCurrentForThisYear
+                            // compares this against the current year on every
+                            // later registration to decide whether to lock
+                            // the fields (same year) or reopen them for
+                            // review (a new year has started since).
+                            profile_year: new Date().getFullYear()
                         };
                         // Job Level, Nationality, etc. — only included when
                         // this course actually asked for them (a course
@@ -2472,6 +2539,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                                 staff_name: 'Name', phone_number: 'Phone', sex: 'Gender',
                                 designation: 'Designation', designation_category: 'Designation Category',
                                 specialization: 'Specialization', institution_name: 'Institution',
+                                profile_year: 'Profile Year (annual refresh)',
                                 ...targetingLabelByKey
                             };
                             Object.keys(participantFields).forEach(key => {
