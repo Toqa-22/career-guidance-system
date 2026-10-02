@@ -488,8 +488,14 @@ async function startSolveMode() {
             // empty answer set (0 answers, 0 score) purely to flip the
             // attempt to 'submitted' so the "one attempt ever" rule holds
             // and the staff number is never silently blocked forever.
-            await submitExamAttempt(attempt, [], true);
-            document.getElementById('examAlreadyDoneNotice').classList.remove('hidden-element');
+            try {
+                await submitExamAttempt(attempt, [], true);
+                document.getElementById('examAlreadyDoneNotice').textContent = "Time's up — your exam was submitted automatically. Taking you back to registration…";
+                document.getElementById('examAlreadyDoneNotice').classList.remove('hidden-element');
+                goToRegistrationAfterSuccess();
+            } catch (err) {
+                showFatalError('Something went wrong finalizing your exam. Please reopen this link to try again — your in-progress attempt is still saved.');
+            }
             return;
         }
         currentAttempt = attempt;
@@ -562,6 +568,16 @@ function startCountdown(expiresAtMs) {
                     document.getElementById('examAlreadyDoneNotice').textContent = "Time's up — your exam was submitted automatically with whatever you had answered. Taking you back to registration…";
                     document.getElementById('examAlreadyDoneNotice').classList.remove('hidden-element');
                     goToRegistrationAfterSuccess();
+                }).catch(() => {
+                    // Previously unhandled — a failure here used to vanish
+                    // completely: no message, attempt stuck at 'in_progress'
+                    // forever, nothing showing on the Exam Dashboard or Exam
+                    // Scores for this participant. autoSubmitting is reset so
+                    // reopening the exam link retries instead of being
+                    // silently stuck with a dead Submit button.
+                    autoSubmitting = false;
+                    document.getElementById('examSubmitError').textContent = 'Time ran out, but your exam could not be submitted automatically. Please click Submit below to try again.';
+                    document.getElementById('examSubmitError').classList.remove('hidden-element');
                 });
             }
             return;
@@ -598,16 +614,30 @@ async function submitExamAttempt(attempt, answers, isAuto) {
         };
     });
 
+    // Neither of these two writes was ever checked for an error — exactly
+    // the same silent-failure shape found and fixed elsewhere this session
+    // (create-exam.js/create-evaluation.js's question saves, workshops.js's
+    // registration gate). A failure here previously left the attempt
+    // sitting at status 'in_progress' forever with no error shown anywhere:
+    // the participant saw a normal "Success" screen and got redirected, the
+    // Exam Dashboard's "Responses"/"submitted" counts and Exam Scores never
+    // picked it up (they only count rows that actually made it to
+    // 'submitted'), and check-registration kept reporting the certificate's
+    // required exam as still pending — all without a single visible error
+    // anywhere. Now surfaced by throwing, which every caller below already
+    // catches (or has been given a catch for).
     if (answerRows.length > 0) {
-        await client.from('activity_exam_answers').insert(answerRows);
+        const { error: answersErr } = await client.from('activity_exam_answers').insert(answerRows);
+        if (answersErr) throw new Error('Could not save your answers: ' + answersErr.message);
     }
 
-    await client.from('activity_exam_attempts').update({
+    const { error: updateErr } = await client.from('activity_exam_attempts').update({
         status: 'submitted',
         submitted_at: new Date().toISOString(),
         total_score: totalScore,
         max_score: maxScore
     }).eq('id', attempt.id);
+    if (updateErr) throw new Error('Could not finalize your submission: ' + updateErr.message);
 
     if (countdownTimer) clearInterval(countdownTimer);
 }
