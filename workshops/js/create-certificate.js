@@ -576,19 +576,29 @@ document.getElementById('saveCertificateBtn').addEventListener('click', async ()
         // Same delete-and-reinsert pattern used everywhere else for a
         // small "which of these apply" set — simple, and safe since this
         // list is edited infrequently and never has more than a handful of
-        // rows.
-        await client.from('certificate_required_evaluations').delete().eq('certificate_id', currentCertId);
+        // rows. Every one of these four calls is now error-checked — none
+        // of them were before, which is exactly how a certificate could
+        // report "saved successfully" while its Required Exam link never
+        // actually made it into certificate_required_exams: the admin
+        // configures it, sees success, and the public certificate page
+        // (and check-registration) never gates on it at all because the
+        // row simply isn't there.
+        const { error: delEvalErr } = await client.from('certificate_required_evaluations').delete().eq('certificate_id', currentCertId);
+        if (delEvalErr) throw new Error('Could not update required evaluations: ' + delEvalErr.message);
         if (requiredEvaluationIds.length > 0) {
-            await client.from('certificate_required_evaluations').insert(
+            const { error: insEvalErr } = await client.from('certificate_required_evaluations').insert(
                 requiredEvaluationIds.map(evaluation_id => ({ certificate_id: currentCertId, evaluation_id }))
             );
+            if (insEvalErr) throw new Error('Could not save required evaluations: ' + insEvalErr.message);
         }
 
-        await client.from('certificate_required_exams').delete().eq('certificate_id', currentCertId);
+        const { error: delExamErr } = await client.from('certificate_required_exams').delete().eq('certificate_id', currentCertId);
+        if (delExamErr) throw new Error('Could not update required exams: ' + delExamErr.message);
         if (requiredExamIds.length > 0) {
-            await client.from('certificate_required_exams').insert(
+            const { error: insExamErr } = await client.from('certificate_required_exams').insert(
                 requiredExamIds.map(exam_id => ({ certificate_id: currentCertId, exam_id }))
             );
+            if (insExamErr) throw new Error('Could not save required exams: ' + insExamErr.message);
         }
 
         alert('Certificate saved successfully!');
