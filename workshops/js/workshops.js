@@ -790,6 +790,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         function resetStaffGate() {
             matchedParticipant = null;
             enteredStaffNumberRaw = '';
+            unlockProfileFields();
             document.getElementById('staffNumberGateInput').value = '';
             document.getElementById('staffGateMessage').classList.add('hidden-element');
             document.getElementById('staffGateSummary').classList.add('hidden-element');
@@ -869,6 +870,73 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     select.value = savedValue;
                 }
             });
+        }
+
+        // A participant's core personal/professional info is meant to be
+        // captured ONCE (at their very first-ever registration, under this
+        // staff number) and reused from then on — not retyped, and
+        // potentially drifted, on every later registration. For a staff
+        // number that already has a saved participants row, these fields
+        // get prefilled (prefillFromParticipant, above) and then locked
+        // here so the participant can only view them; correcting a mistake
+        // afterwards is an admin-only action (Participant Registrations /
+        // Edit Participant, js/students.js), never something done by
+        // re-registering. "Current Post" (specializationInput) and
+        // "Designation" are included since they're asked at every
+        // registration today but are meant to describe the participant
+        // themselves, same as the rest.
+        const LOCKABLE_CORE_FIELD_IDS = [
+            'staffName', 'phoneNumber', 'sexSelect', 'designationSelect',
+            'otherDesignationInput', 'specializationInput',
+            'institutionTypeSelect', 'departmentSelect', 'otherInstitutionInput',
+            'otherInstitutionFreeText'
+        ];
+
+        // Called at the very end of handleCourseSelectionChange, once every
+        // rebuild that touches these fields' option lists (targeting
+        // selects in particular — see updateTargetingSelectOptionsForCourse,
+        // which only ever runs as part of revealing page 1) has already
+        // happened — locking any earlier wouldn't survive those rebuilds.
+        function lockProfileFieldsForReturningParticipant(p) {
+            LOCKABLE_CORE_FIELD_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = true;
+            });
+
+            // Targeting fields (Job Level, Nationality, ...) are course-
+            // dependent and only sometimes asked for — only lock (and
+            // re-apply, now that this course's filtered option list
+            // actually exists) the ones this participant already has a
+            // saved value for. One they've never been asked to supply
+            // before is left open so they can fill it in for the first
+            // time; it's then locked on every registration after that,
+            // same as the core fields above.
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                if (!select) return;
+                const savedValue = p[field.key];
+                if (savedValue && Array.from(select.options).some(o => o.value === savedValue)) {
+                    select.value = savedValue;
+                    select.disabled = true;
+                }
+            });
+
+            document.getElementById('lockedProfileNotice').classList.remove('hidden-element');
+        }
+
+        // Undoes the above — needed when "Not you? Change staff number" is
+        // used, so a brand-new (unmatched) staff number entered right after
+        // doesn't inherit the previous participant's locked, disabled fields.
+        function unlockProfileFields() {
+            LOCKABLE_CORE_FIELD_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                if (select) select.disabled = false;
+            });
+            document.getElementById('lockedProfileNotice').classList.add('hidden-element');
         }
 
         async function handleStaffGateContinue() {
@@ -1688,6 +1756,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // Previous/Next footer if this course's questions span more
             // than one page.
             beginRegistrationPaging(courseId);
+
+            // Locking happens after beginRegistrationPaging (not right after
+            // prefillFromParticipant above) because revealing page 1 is what
+            // actually builds the targeting selects' (Job Level, Nationality,
+            // ...) course-filtered option lists — locking any earlier would
+            // just be undone the moment those options get rebuilt. A
+            // brand-new (unmatched) staff number stays fully editable, same
+            // as always.
+            if (matchedParticipant) {
+                lockProfileFieldsForReturningParticipant(matchedParticipant);
+            } else {
+                unlockProfileFields();
+            }
         }
 
         function updateSelectableCoursesOptions() {
@@ -2398,7 +2479,19 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                             });
 
                             participantId = matchedParticipant.id;
-                            await client.from('participants').update(participantFields).eq('id', participantId);
+                            // Core profile fields are locked on the form for a
+                            // returning staff number (see
+                            // lockProfileFieldsForReturningParticipant) — so on
+                            // a normal re-registration nothing here actually
+                            // differs from what's already saved, and there's
+                            // no reason to rewrite the row. Only write when
+                            // something genuinely changed, which in practice
+                            // now only happens the first time a course asks
+                            // for a targeting field (Job Level, Nationality,
+                            // ...) this participant was never asked for before.
+                            if (changedLabels.length > 0) {
+                                await client.from('participants').update(participantFields).eq('id', participantId);
+                            }
 
                             await client.from('registration_events_log').insert({
                                 event_type: 'existing_participant_enrolled',
