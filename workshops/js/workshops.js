@@ -2338,8 +2338,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
             for (const field of TARGETING_FIELDS) {
                 const wrapper = document.getElementById('regFieldWrapper_' + field.key);
-                const isHidden = wrapper && wrapper.classList.contains('hidden-element');
-                if (isHidden) continue;
+                // dataset.hiddenForCourse (set by updateTargetingSelectOptionsForCourse)
+                // means the course itself doesn't offer this field at all —
+                // that's the only reason to skip it here. classList's
+                // 'hidden-element' also gets set/cleared per CURRENT PAGE by
+                // applyTargetingFieldPageVisibility, which is irrelevant at
+                // Submit time (always the last page) and must not be used
+                // here, or a field configured for an earlier page would read
+                // as hidden and silently skip this whole-form check.
+                const notOfferedByCourse = wrapper && wrapper.dataset.hiddenForCourse === 'true';
+                if (notOfferedByCourse) continue;
                 if (!targetingValues[field.key]) missingNow.push(field.label);
             }
             if (missingNow.length > 0) {
