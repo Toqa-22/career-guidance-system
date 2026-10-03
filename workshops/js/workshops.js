@@ -842,30 +842,75 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         function prefillFromParticipant(p) {
             document.getElementById('staffName').value = p.staff_name || '';
             document.getElementById('phoneNumber').value = p.phone_number || '';
-            document.getElementById('sexSelect').value = p.sex || '';
             document.getElementById('specializationInput').value = p.specialization || '';
 
+            // Gender: same graceful-degradation rule as Designation and
+            // Institution below — a course can restrict registration to
+            // one gender only (course.allowed_sex, applied by
+            // updateGenderOptionsForCourse just before this runs), which
+            // removes the other option from the dropdown entirely. Setting
+            // sexSelect.value to a saved gender that isn't offered by THIS
+            // course silently selects nothing (no matching option), so
+            // only commit to it when it's actually still available;
+            // otherwise leave it blank for the participant to confirm
+            // themselves rather than locking an empty selection.
+            const sexSelect = document.getElementById('sexSelect');
+            const sexMatched = !p.sex || Array.from(sexSelect.options).some(o => o.value === p.sex);
+            sexSelect.value = sexMatched ? (p.sex || '') : '';
+
+            // Same graceful-degradation rule as Designation below: a
+            // course can restrict which institutions/departments it even
+            // offers (courseInstitutionsMapCached — see filterIbraDepartments
+            // / filterOtherInstitutions), removing any option this course
+            // doesn't allow entirely from the dropdown rather than just
+            // disabling it. Forcing institutionTypeSelect to "Ibra"/"Other"
+            // and leaving the actual department/institution dropdown
+            // unmatched used to produce a LOCKED field showing no real
+            // value — the participant couldn't fix it, and submitting
+            // failed with "Please select your institution name" because
+            // the underlying select was genuinely empty. Now: only commit
+            // to the saved institution if this course's filtered option
+            // list actually contains it; otherwise reset back to blank so
+            // it's left open for them to pick one this course actually
+            // offers.
             const isIbra = (p.institution_name || '').startsWith('Ibra - ');
-            document.getElementById('institutionTypeSelect').value = isIbra ? 'Ibra' : (p.institution_name ? 'Other' : '');
+            const instTypeSelect = document.getElementById('institutionTypeSelect');
+            instTypeSelect.value = isIbra ? 'Ibra' : (p.institution_name ? 'Other' : '');
             renderInstitutionFields();
+            let institutionMatched = !p.institution_name; // nothing saved yet is not a mismatch
             if (isIbra) {
                 const dept = (p.institution_name || '').replace('Ibra - ', '');
                 const deptSelect = document.getElementById('departmentSelect');
-                if (Array.from(deptSelect.options).some(o => o.value === dept)) deptSelect.value = dept;
+                institutionMatched = Array.from(deptSelect.options).some(o => o.value === dept);
+                if (institutionMatched) deptSelect.value = dept;
             } else if (p.institution_name) {
                 const otherSelect = document.getElementById('otherInstitutionInput');
-                if (Array.from(otherSelect.options).some(o => o.value === p.institution_name)) {
+                institutionMatched = Array.from(otherSelect.options).some(o => o.value === p.institution_name);
+                if (institutionMatched) {
                     otherSelect.value = p.institution_name;
                     handleOtherInstitutionChange();
                 }
             }
+            if (!institutionMatched) {
+                instTypeSelect.value = '';
+                renderInstitutionFields();
+            }
 
+            // Only prefill Designation if this course's (possibly
+            // restricted — see allowed_designations) option list actually
+            // includes the participant's saved designation_category. If it
+            // doesn't, this course simply offers a different set of
+            // designations than whichever course they last registered for
+            // — leave it blank so they pick the right one themselves,
+            // rather than guessing "Other (Please Specify)" and stuffing
+            // their real designation into that free-text box, which looked
+            // like a wrong, locked answer they never actually chose.
             const designationSelect = document.getElementById('designationSelect');
             if (p.designation_category && Array.from(designationSelect.options).some(o => o.value === p.designation_category)) {
                 designationSelect.value = p.designation_category;
-            } else if (p.designation) {
-                designationSelect.value = 'Other';
-                document.getElementById('otherDesignationInput').value = p.designation;
+                if (p.designation_category === 'Other') {
+                    document.getElementById('otherDesignationInput').value = p.designation || '';
+                }
             }
             handleDesignationChange();
 
@@ -910,14 +955,25 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         // goes false and these same fields are left editable (still
         // prefilled with last year's values as a starting point) until
         // they're saved again — see the profileRefreshNotice branch below.
-        // "Current Post" (specializationInput) and "Designation" are
-        // included since they're asked at every registration today but are
-        // meant to describe the participant themselves, same as the rest.
+        // "Current Post" (specializationInput) is included since it's asked
+        // at every registration today but is meant to describe the
+        // participant themselves, same as the rest. "Gender" (sexSelect),
+        // "Designation" (designationSelect / otherDesignationInput), and
+        // institution (institutionTypeSelect / departmentSelect /
+        // otherInstitutionInput / otherInstitutionFreeText) are all handled
+        // separately below instead of being blanket-locked here — a course
+        // can restrict which genders, designations, and
+        // institutions/departments it even offers (allowed_sex,
+        // allowed_designations, courseInstitutionsMapCached), removing an
+        // option this course doesn't allow entirely rather than just
+        // disabling it. Locking these unconditionally used to leave a
+        // returning participant staring at a locked field with no real
+        // value selected whenever this course's restricted list didn't
+        // include their saved answer — unfixable, and failing at submit
+        // with "Please select your institution name"/designation/"Please
+        // complete all text fields...". See lockProfileFieldsForReturningParticipant.
         const LOCKABLE_CORE_FIELD_IDS = [
-            'staffName', 'phoneNumber', 'sexSelect', 'designationSelect',
-            'otherDesignationInput', 'specializationInput',
-            'institutionTypeSelect', 'departmentSelect', 'otherInstitutionInput',
-            'otherInstitutionFreeText'
+            'staffName', 'phoneNumber', 'specializationInput'
         ];
 
         // Called at the very end of handleCourseSelectionChange, once every
@@ -930,6 +986,49 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const el = document.getElementById(id);
                 if (el) el.disabled = true;
             });
+
+            // Designation: only lock it if the participant's saved
+            // designation_category is actually one of this course's
+            // currently offered options (updateDesignationOptionsForCourse,
+            // called before prefillFromParticipant, already filtered the
+            // select down to this course's allowed_designations). If it
+            // isn't — a different course restricting designations
+            // differently — prefillFromParticipant leaves the field blank
+            // rather than guessing "Other", so leave it unlocked here too,
+            // letting the participant pick the right one for THIS activity
+            // instead of being stuck looking like they chose "Other".
+            const designationSelect = document.getElementById('designationSelect');
+            const designationMatched = designationSelect && p.designation_category &&
+                Array.from(designationSelect.options).some(o => o.value === p.designation_category);
+            if (designationMatched) {
+                designationSelect.disabled = true;
+                if (designationSelect.value === 'Other') {
+                    document.getElementById('otherDesignationInput').disabled = true;
+                }
+            }
+
+            // Institution/department: same escape hatch. prefillFromParticipant
+            // already reset institutionTypeSelect back to '' whenever this
+            // course's filtered department/institution list didn't contain
+            // the participant's saved value — so a non-empty value here
+            // means it genuinely matched and was set, safe to lock.
+            const instTypeSelect = document.getElementById('institutionTypeSelect');
+            if (instTypeSelect.value === 'Ibra') {
+                instTypeSelect.disabled = true;
+                document.getElementById('departmentSelect').disabled = true;
+            } else if (instTypeSelect.value === 'Other') {
+                instTypeSelect.disabled = true;
+                document.getElementById('otherInstitutionInput').disabled = true;
+                if (document.getElementById('otherInstitutionInput').value === OTHER_CATCHALL_NAME) {
+                    document.getElementById('otherInstitutionFreeText').disabled = true;
+                }
+            }
+
+            // Gender: same escape hatch — only lock it if prefillFromParticipant
+            // actually found the saved gender among this course's (possibly
+            // restricted to one gender) options and set it.
+            const sexSelect = document.getElementById('sexSelect');
+            if (sexSelect.value) sexSelect.disabled = true;
 
             // Targeting fields (Job Level, Nationality, ...) are course-
             // dependent and only sometimes asked for — only lock (and
@@ -961,6 +1060,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         // doesn't inherit the previous participant's locked, disabled fields.
         function unlockProfileFields() {
             LOCKABLE_CORE_FIELD_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
+            ['designationSelect', 'otherDesignationInput', 'institutionTypeSelect',
+             'departmentSelect', 'otherInstitutionInput', 'otherInstitutionFreeText',
+             'sexSelect'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.disabled = false;
             });
