@@ -760,6 +760,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         // course actually narrows them — an untouched "All"/empty value
         // means anyone qualifies, so those are skipped rather than flagged.
         function getEligibilityBlockReason(participant, course, courseId) {
+            // Every sibling helper that takes a possibly-missing course
+            // guards this the same way (getSectionPages, filterIbraDepartments,
+            // etc.) — this one didn't, so a course that went missing from
+            // coursesCached between render and this call would throw here
+            // instead of just treating it as "nothing to check yet".
+            if (!course) return null;
             if (course.allowed_sex === 'Male' && participant.sex && participant.sex !== 'Male') {
                 return 'This activity is open to Male participants only, and your saved profile has you as Female.';
             }
@@ -885,10 +891,28 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 if (institutionMatched) deptSelect.value = dept;
             } else if (p.institution_name) {
                 const otherSelect = document.getElementById('otherInstitutionInput');
-                institutionMatched = Array.from(otherSelect.options).some(o => o.value === p.institution_name);
+                // A saved free-text "Other" institution isn't stored as the
+                // plain select value — handleSubmit saves it as the
+                // composite "Other (Please Specify): <what they typed>"
+                // (OTHER_CATCHALL_NAME + their free text), while the select
+                // option itself is just the bare OTHER_CATCHALL_NAME. Without
+                // this split, the composite string never matches any option
+                // here, so this whole subgroup's institution silently reset
+                // to blank on every later visit despite being saved
+                // correctly. filterOtherInstitutions already recognizes this
+                // same composite format elsewhere (its `.startsWith` check)
+                // — this mirrors it.
+                const catchAllPrefix = `${OTHER_CATCHALL_NAME}: `;
+                const isCatchAllSaved = p.institution_name.startsWith(catchAllPrefix);
+                const savedFreeText = isCatchAllSaved ? p.institution_name.slice(catchAllPrefix.length) : '';
+                const matchTarget = isCatchAllSaved ? OTHER_CATCHALL_NAME : p.institution_name;
+                institutionMatched = Array.from(otherSelect.options).some(o => o.value === matchTarget);
                 if (institutionMatched) {
-                    otherSelect.value = p.institution_name;
+                    otherSelect.value = matchTarget;
                     handleOtherInstitutionChange();
+                    if (isCatchAllSaved) {
+                        document.getElementById('otherInstitutionFreeText').value = savedFreeText;
+                    }
                 }
             }
             if (!institutionMatched) {
@@ -2253,7 +2277,29 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             });
         }
 
+        // Thin re-entrancy guard around the real submit logic below
+        // (renamed to handleSubmitInner, otherwise untouched). regBtn only
+        // gets disabled well after several awaited checks (closed-course,
+        // duplicate-registration) run — a fast double-click/double-tap
+        // before that point could start two overlapping submissions, both
+        // passing those checks, both uploading files, before the database's
+        // own unique constraint finally rejects the second one. This flag
+        // is set synchronously on the very first click and only ever
+        // cleared in `finally`, so it covers every return path inside
+        // handleSubmitInner (including all its early `return;`s) without
+        // having to touch each one individually.
+        let handleSubmitInFlight = false;
         async function handleSubmit() {
+            if (handleSubmitInFlight) return;
+            handleSubmitInFlight = true;
+            try {
+                await handleSubmitInner();
+            } finally {
+                handleSubmitInFlight = false;
+            }
+        }
+
+        async function handleSubmitInner() {
             const regBtn = document.getElementById('regBtn');
             const courseIdForClosedCheck = Number(document.getElementById('courseSelect').value);
             const { data: freshCourse } = await client.from('courses').select('links_closed').eq('id', courseIdForClosedCheck).maybeSingle();
@@ -2603,7 +2649,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 // correctly. Ordering by newest and taking the first row
                 // instead of maybeSingle() means a stray duplicate can
                 // never again make this lookup come back empty.
-                const { data: newRegRows } = await client
+                const { data: newRegRows, error: newRegLookupErr } = await client
                     .from('registrations')
                     .select('id')
                     .eq('course_id', courseId)
@@ -2611,6 +2657,18 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     .order('created_at', { ascending: false })
                     .limit(1);
                 const newReg = (newRegRows && newRegRows[0]) || null;
+                // The registration itself (submit_registration above) has
+                // already committed successfully by this point — this is
+                // only the follow-up lookup used to attach custom answers,
+                // a first-session log entry, and the participant link. If
+                // it errors or comes back empty (network blip, replication
+                // lag), those three things get silently skipped below with
+                // no record of it; logging it here at least leaves a trace
+                // for the admin to reconcile, same soft-fail convention as
+                // the participant-link try/catch further down.
+                if (!newReg) {
+                    console.error('Follow-up registration lookup failed after a successful submit — custom answers, first-session log entry, and participant link were skipped:', newRegLookupErr);
+                }
 
                 if (newReg) {
                     if (customAnswers.length > 0) {
