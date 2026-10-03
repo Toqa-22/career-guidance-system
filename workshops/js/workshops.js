@@ -997,15 +997,20 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // rather than guessing "Other", so leave it unlocked here too,
             // letting the participant pick the right one for THIS activity
             // instead of being stuck looking like they chose "Other".
+            //
+            // Every branch below sets .disabled EXPLICITLY (both the locked
+            // and the not-locked case) rather than only ever setting it
+            // true — the course dropdown has no guard against being
+            // changed again after this already ran once (handleCourseSelectionChange
+            // re-fires on every 'change'), so a field a PREVIOUS course
+            // locked must be actively re-enabled here if THIS course's
+            // value doesn't match, or it would stay stuck disabled-and-blank.
             const designationSelect = document.getElementById('designationSelect');
-            const designationMatched = designationSelect && p.designation_category &&
-                Array.from(designationSelect.options).some(o => o.value === p.designation_category);
-            if (designationMatched) {
-                designationSelect.disabled = true;
-                if (designationSelect.value === 'Other') {
-                    document.getElementById('otherDesignationInput').disabled = true;
-                }
-            }
+            const otherDesignationInput = document.getElementById('otherDesignationInput');
+            const designationMatched = !!(designationSelect && p.designation_category &&
+                Array.from(designationSelect.options).some(o => o.value === p.designation_category));
+            designationSelect.disabled = designationMatched;
+            otherDesignationInput.disabled = designationMatched && designationSelect.value === 'Other';
 
             // Institution/department: same escape hatch. prefillFromParticipant
             // already reset institutionTypeSelect back to '' whenever this
@@ -1013,22 +1018,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // the participant's saved value — so a non-empty value here
             // means it genuinely matched and was set, safe to lock.
             const instTypeSelect = document.getElementById('institutionTypeSelect');
-            if (instTypeSelect.value === 'Ibra') {
-                instTypeSelect.disabled = true;
-                document.getElementById('departmentSelect').disabled = true;
-            } else if (instTypeSelect.value === 'Other') {
-                instTypeSelect.disabled = true;
-                document.getElementById('otherInstitutionInput').disabled = true;
-                if (document.getElementById('otherInstitutionInput').value === OTHER_CATCHALL_NAME) {
-                    document.getElementById('otherInstitutionFreeText').disabled = true;
-                }
-            }
+            const departmentSelect = document.getElementById('departmentSelect');
+            const otherInstitutionInput = document.getElementById('otherInstitutionInput');
+            const otherInstitutionFreeText = document.getElementById('otherInstitutionFreeText');
+            const institutionMatchedIbra = instTypeSelect.value === 'Ibra';
+            const institutionMatchedOther = instTypeSelect.value === 'Other';
+            instTypeSelect.disabled = institutionMatchedIbra || institutionMatchedOther;
+            departmentSelect.disabled = institutionMatchedIbra;
+            otherInstitutionInput.disabled = institutionMatchedOther;
+            otherInstitutionFreeText.disabled = institutionMatchedOther && otherInstitutionInput.value === OTHER_CATCHALL_NAME;
 
             // Gender: same escape hatch — only lock it if prefillFromParticipant
             // actually found the saved gender among this course's (possibly
             // restricted to one gender) options and set it.
             const sexSelect = document.getElementById('sexSelect');
-            if (sexSelect.value) sexSelect.disabled = true;
+            sexSelect.disabled = !!sexSelect.value;
 
             // Targeting fields (Job Level, Nationality, ...) are course-
             // dependent and only sometimes asked for — only lock (and
@@ -1046,10 +1050,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const select = document.getElementById('reg_' + field.key);
                 if (!select) return;
                 const savedValue = p[field.key];
-                if (savedValue && Array.from(select.options).some(o => o.value === savedValue)) {
-                    select.value = savedValue;
-                    select.disabled = true;
-                }
+                // Pre-existing gap fixed alongside the others above: this
+                // must set .disabled explicitly either way, not only when
+                // matched — the course dropdown can be changed again
+                // without a page reload, and a field a PREVIOUS course
+                // locked (disabled=true) needs to be actively unlocked here
+                // if THIS course's saved value isn't one of its options,
+                // or it stays stuck disabled-and-blank just like before.
+                const matched = !!(savedValue && Array.from(select.options).some(o => o.value === savedValue));
+                if (matched) select.value = savedValue;
+                select.disabled = matched;
             });
 
             document.getElementById('lockedProfileNotice').classList.remove('hidden-element');
