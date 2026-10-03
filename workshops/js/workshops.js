@@ -1205,19 +1205,24 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const currentValue = select.value;
             const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
 
+            const course = coursesCached.find(c => c.id === courseId);
             const hasIbra = mappingsForCourse.some(m => m.institutions?.name?.startsWith('Ibra - '));
             const hasOther = mappingsForCourse.some(m => m.institutions?.name && !m.institutions.name.startsWith('Ibra - '));
-            // If no allocation has been configured for this course at all, fall back to showing both
-            // rather than blocking registration entirely.
+            // If no allocation has been configured for this course at all,
+            // or the course is unlimited-seats, fall back to showing both
+            // rather than blocking registration entirely — matches the same
+            // rule filterIbraDepartments/filterOtherInstitutions and the
+            // registration-time eligibility check already use.
             const noMappingConfigured = mappingsForCourse.length === 0;
+            const isOpen = noMappingConfigured || !!(course && course.unlimited_seats);
 
             let optionsHtml = '<option value="">-- Choose Institution Option --</option>';
-            if (hasIbra || noMappingConfigured) optionsHtml += '<option value="Ibra">Ibra hospital</option>';
-            if (hasOther || noMappingConfigured) optionsHtml += '<option value="Other">Other hospital and health center</option>';
+            if (hasIbra || isOpen) optionsHtml += '<option value="Ibra">Ibra hospital</option>';
+            if (hasOther || isOpen) optionsHtml += '<option value="Other">Other hospital and health center</option>';
             select.innerHTML = optionsHtml;
 
-            const stillValid = (currentValue === 'Ibra' && (hasIbra || noMappingConfigured)) ||
-                                (currentValue === 'Other' && (hasOther || noMappingConfigured));
+            const stillValid = (currentValue === 'Ibra' && (hasIbra || isOpen)) ||
+                                (currentValue === 'Other' && (hasOther || isOpen));
             select.value = stillValid ? currentValue : '';
         }
 
