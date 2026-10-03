@@ -778,7 +778,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
 
             const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
-            if (mappingsForCourse.length > 0 && participant.institution_id) {
+            if (mappingsForCourse.length > 0 && participant.institution_id && !course.unlimited_seats) {
                 const isAllowed = mappingsForCourse.some(m => m.institution_id === participant.institution_id);
                 if (!isAllowed) {
                     return 'This activity is limited to specific institutions/departments, and your saved institution isn\'t one of them.';
@@ -2303,14 +2303,45 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 targetingValues[field.key] = select ? select.value : '';
             }
 
-            if (!phoneNumber || !sexValue || !staffName || !staffNumber || !designation || !specialization || !courseId || !instType) {
-                alert("Please complete all text fields and selection items.");
+            // Final Submit-time backstop — names every specific field still
+            // missing in one message, rather than a generic "something's
+            // incomplete". Mirrors validateCurrentRegPage's per-field
+            // labels but checks the WHOLE form regardless of page, since a
+            // field can end up genuinely blank here even after passing
+            // every page's own Next-button check — e.g. a returning
+            // participant's saved Institution/Designation/Gender wasn't
+            // offered by THIS activity (prefillFromParticipant leaves it
+            // open rather than guessing), and they reached Submit without
+            // noticing it still needs a fresh answer.
+            const missingNow = [];
+            if (!staffName) missingNow.push('Full Name');
+            else if (staffName.split(/\s+/).filter(Boolean).length < 2) missingNow.push('Full Name (first and last name)');
+            if (!staffNumber) missingNow.push('Staff Number');
+            if (!phoneNumber) missingNow.push('Phone Number');
+            if (!sexValue) missingNow.push('Gender');
+            if (!designationCategory) missingNow.push('Designation');
+            else if (designationCategory === 'Other' && !designation) missingNow.push('Designation (please specify)');
+            if (!specialization) missingNow.push('Current Post');
+            if (!courseId) missingNow.push('Activity');
+            if (!instType) {
+                missingNow.push('Institution/Department');
+            } else if (instType === 'Ibra') {
+                if (!selectedDept) missingNow.push('Department');
+            } else {
+                if (!otherText) missingNow.push('Institution');
+                else if (otherText === OTHER_CATCHALL_NAME && !otherFreeText) missingNow.push('Institution name');
+            }
+            for (const field of TARGETING_FIELDS) {
+                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
+                const isHidden = wrapper && wrapper.classList.contains('hidden-element');
+                if (isHidden) continue;
+                if (!targetingValues[field.key]) missingNow.push(field.label);
+            }
+            if (missingNow.length > 0) {
+                alert(`Please complete the following before submitting: ${missingNow.join(', ')}.`);
                 return;
             }
-            if (staffName.trim().split(/\s+/).filter(Boolean).length < 2) {
-                alert('Please enter your first and last name — a single name is not enough.');
-                return;
-            }
+
             if (!document.getElementById('certNameAgreementLabel').classList.contains('hidden-element') && !document.getElementById('certNameAgreement').checked) {
                 alert('Please confirm your full name is correct before submitting — this is what will be printed on your certificate.');
                 return;
@@ -2326,22 +2357,17 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const firstLogDeptVal = document.getElementById('firstLogDept').value;
                 const firstLogDateFromVal = document.getElementById('firstLogDateFrom').value;
                 const firstLogDateToVal = document.getElementById('firstLogDateTo').value;
-                if (!firstLogTitleVal || !firstLogDeptVal || !firstLogDateFromVal || !firstLogDateToVal) {
-                    alert("Please fill in the title, organized by, and date range for your first session.");
+                const missingFirstLog = [];
+                if (!firstLogTitleVal) missingFirstLog.push('Title');
+                if (!firstLogDeptVal) missingFirstLog.push('Organized By');
+                if (!firstLogDateFromVal) missingFirstLog.push('Date From');
+                if (!firstLogDateToVal) missingFirstLog.push('Date To');
+                if (missingFirstLog.length > 0) {
+                    alert(`Please complete the following for your first session: ${missingFirstLog.join(', ')}.`);
                     return;
                 }
                 if (firstLogDateToVal < firstLogDateFromVal) {
                     alert('The "To" date can\'t be before the "From" date.');
-                    return;
-                }
-            }
-
-            for (const field of TARGETING_FIELDS) {
-                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
-                const isHidden = wrapper && wrapper.classList.contains('hidden-element');
-                if (isHidden) continue;
-                if (!targetingValues[field.key]) {
-                    alert(`Please select at least one option for "${field.label}".`);
                     return;
                 }
             }
