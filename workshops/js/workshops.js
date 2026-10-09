@@ -1,0 +1,3043 @@
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+        const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let coursesCached = [];
+        let courseInstitutionsMapCached = [];
+        let registrationLogsCached = [];
+        let institutionsByNameCached = new Map();
+
+        const departmentsList = [
+            "Emergency Department Doctor", "Emergency Department Nurse", "Internal Medicine Department", "General Surgery Department",
+            "Paediatrician", "Obstetrics and Gynecology Department", "Orthopedics Department",
+            "Ophthalmology Department", "ENT Department", "Anesthesia Department",
+            "Dialysis Unit Nurse", "Radiology Department", "Laboratory Department",
+            "Physiotherapy Department", "Clinical Nutrition Department", "Pharmacy Department",
+            "Male Medical and Surgical Ward", "Female Medical and Surgical Ward", "Pediatrics Ward",
+            "Obstetrics and Gynecology Ward", "Adult Intensive Care Unit (ICU)", "Special Care Baby Unit (SCBU)",
+            "OPD", "Nephrologist", "DS Nurse", "OT Nurse", "RT"
+        ];
+
+        const DESIGNATION_OPTIONS = [
+            'Doctors', 'Nurses', 'Pharmacists', 'Assistant Pharmacists', 'Nutritionists',
+            'Radiographers', 'Physiotherapists', 'Laboratory Technicians', 'Dental Assistants',
+            'Administrative Staff', 'Finance Staff', 'IT Staff', 'Engineers',
+            'Respiratory Therapists', 'Legal Affairs', 'Other'
+        ];
+        const OTHER_CATCHALL_NAME = "Other (Please Specify)";
+
+        // ============================================================================
+        // Per-course theme color — the admin picks one base color in Create Course;
+        // here we derive a light/dark range from it (via HSL) and push those as CSS
+        // custom properties so buttons/accents across this page follow it.
+        // ============================================================================
+        function hexToHsl(hex) {
+            hex = (hex || '').replace('#', '');
+            if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+            if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
+            const r = parseInt(hex.substring(0, 2), 16) / 255;
+            const g = parseInt(hex.substring(2, 4), 16) / 255;
+            const b = parseInt(hex.substring(4, 6), 16) / 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max === min) {
+                h = s = 0;
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    default: h = (r - g) / d + 4;
+                }
+                h /= 6;
+            }
+            return { h: h * 360, s: s * 100, l: l * 100 };
+        }
+
+        function hslToHex(h, s, l) {
+            h /= 360; s /= 100; l /= 100;
+            let r, g, b;
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1 / 6) return p + (q - p) * 6 * t;
+                    if (t < 1 / 2) return q;
+                    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                    return p;
+                };
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1 / 3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1 / 3);
+            }
+            const toHex = v => Math.round(v * 255).toString(16).padStart(2, '0');
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+
+        function shadeColor(hex, lightnessDeltaPct) {
+            const hsl = hexToHsl(hex);
+            if (!hsl) return hex;
+            const l = Math.min(96, Math.max(6, hsl.l + lightnessDeltaPct));
+            return hslToHex(hsl.h, hsl.s, l);
+        }
+
+        const DEFAULT_THEME_COLOR = '#7C3AED';
+
+        // A course's registration window closes once its (optional)
+        // "Registration Closes On" date has passed — course_end_date is the
+        // literal column set in Create Course; if it isn't set, registration
+        // just stays open (no course_date fallback, since course_date is the
+        // event date itself, not a deadline).
+        function isRegistrationOpen(course) {
+            const now = new Date();
+            if (course.registration_opens_date) {
+                const opens = new Date(course.registration_opens_date + 'T00:00:00');
+                if (now < opens) return false;
+            }
+            if (course.course_end_date) {
+                const deadline = new Date(course.course_end_date + 'T23:59:59');
+                if (now > deadline) return false;
+            }
+            return true;
+        }
+
+        // Distinguishes *why* registration isn't open, for the closed-state
+        // message on the Featured card — "not open yet" vs. "already ended"
+        // are different situations worth telling the admin/visitor apart.
+        function registrationStatusMessage(course) {
+            const now = new Date();
+            if (course.registration_opens_date) {
+                const opens = new Date(course.registration_opens_date + 'T00:00:00');
+                if (now < opens) return `Registration opens on ${course.registration_opens_date}.`;
+            }
+            return 'Registration for this course has ended.';
+        }
+
+        function hasOpenSeats(course) {
+            return !!course.unlimited_seats || course.seats > 0;
+        }
+
+        function seatsLabel(course) {
+            return course.unlimited_seats ? 'Unlimited seats' : `${course.seats} total seats left`;
+        }
+
+        function applyCourseTheme(rawColor) {
+            const base = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(rawColor || '') ? rawColor : DEFAULT_THEME_COLOR;
+            const root = document.documentElement.style;
+            root.setProperty('--course-theme', base);
+            root.setProperty('--course-theme-light', shadeColor(base, 16));
+            root.setProperty('--course-theme-dark', shadeColor(base, -16));
+        }
+
+        // The hero starts hidden (see the "theme-loading" class in the HTML/CSS)
+        // so the visitor never sees the default purple flash before the real
+        // course color is known — this reveals it once that color is applied.
+        // The timeout is a failsafe in case the initial fetch is ever slow.
+        function revealHero() {
+            document.body.classList.remove('theme-loading');
+        }
+        setTimeout(revealHero, 1800);
+
+        // ============================================================================
+        // Click-to-enlarge image lightbox — used by the Featured Workshop image.
+        // ============================================================================
+        function openImageLightbox(url, altText) {
+            const overlay = document.createElement('div');
+            overlay.className = 'image-lightbox-overlay';
+            overlay.innerHTML = `<button type="button" class="image-lightbox-close" aria-label="Close">✕</button><img src="${url}" alt="${(altText || '').replace(/"/g, '&quot;')}">`;
+            const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+            const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay || e.target.classList.contains('image-lightbox-close')) close();
+            });
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(overlay);
+        }
+
+        document.addEventListener('click', (e) => {
+            const trigger = e.target.closest('[data-lightbox-img]');
+            if (trigger) openImageLightbox(trigger.getAttribute('data-lightbox-img'), trigger.getAttribute('alt'));
+        });
+
+        // ============================================================================
+        // Target Audience & Registration Options — 8 fields. This exact same shape
+        // (key + options) is duplicated in js/create-course.js for the admin allocation side;
+        // keep both in sync if you ever change the option lists.
+        // ============================================================================
+        const TARGETING_FIELDS = [
+            {
+                key: 'job_level',
+                label: 'Job Level',
+                options: ['General Manager', 'Department Director', 'Head of Department', 'Employee']
+            },
+            {
+                key: 'nationality',
+                label: 'Nationality',
+                options: ['Omani', 'Non-Omani']
+            },
+            {
+                key: 'education_qualification',
+                label: 'Highest Educational Qualification',
+                options: [
+                    'Less than General Diploma', 'General Diploma or Equivalent', 'Higher Diploma',
+                    "Bachelor's Degree", "Master's Degree", 'PhD'
+                ]
+            },
+            {
+                key: 'experience_years',
+                label: 'Experience Years',
+                options: [
+                    'Less than 1 year to 5 years', '6–10 years', '11–15 years',
+                    '16–20 years', '21–25 years', '26 years or more'
+                ]
+            },
+            {
+                key: 'organization',
+                label: 'Organization',
+                options: ['Ministry of Health (MOH)', 'Other Organization']
+            },
+            {
+                key: 'directorate',
+                label: 'Directorate',
+                options: [
+                    "Minister's Office", 'General Directorate of Legal Affairs', 'General Directorate of Internal Audit',
+                    'Office of the Undersecretary for Administrative and Financial Affairs', 'General Directorate of Human Resources',
+                    'General Directorate of Financial Affairs', 'General Directorate of Medical Supplies',
+                    'General Directorate of Projects and Engineering Services', 'Office of the Undersecretary for Health Planning and Organization',
+                    'General Directorate of Planning', 'General Directorate of Information Technology and Digital Health',
+                    'Quality Assurance Center', 'Drug Safety Center', 'General Directorate of Private Health Institutions',
+                    'Office of the Undersecretary for Health Affairs', 'General Directorate of Health Services and Programs',
+                    'Disease Control and Prevention Center', "National Center for Women's and Children's Health",
+                    'Royal Hospital', 'Khoula Hospital', 'Muscat Governorate', 'Dhofar Governorate', 'Musandam Governorate',
+                    'Al Buraimi Governorate', 'Al Dakhiliyah Governorate', 'North Al Batinah Governorate', 'South Al Batinah Governorate',
+                    'North Al Sharqiyah Governorate', 'South Al Sharqiyah Governorate', 'Al Dhahirah Governorate', 'Al Wusta Governorate'
+                ]
+            },
+            {
+                key: 'program_type',
+                label: 'Type of Program',
+                options: ['On-the-Job Training', 'Learning from Others', 'Formal Training']
+            },
+            {
+                key: 'attendance_nature',
+                label: 'Nature of Attendance',
+                options: ['In-person attendance | حضوري', 'Virtual | إفتراضي', 'Hybrid | مدمج']
+            }
+        ];
+
+        // Type of Program and Nature of Attendance describe THIS activity,
+        // not the participant permanently — the same person can attend one
+        // course in person and another virtually. So unlike the rest of
+        // TARGETING_FIELDS (which includes Directorate — back to being a
+        // normal locked/saved profile field, same as Job Level, Nationality,
+        // etc.), these two are never prefilled from a past registration,
+        // never locked, and never written to the participants table as a
+        // saved "profile" value — only kept as a per-registration snapshot
+        // (targetingSnapshotPayload / p_..._snapshot below), exactly like
+        // every other field on registrations itself. See
+        // prefillFromParticipant, lockProfileFieldsForReturningParticipant,
+        // and the participantFields object further down.
+        const PER_ACTIVITY_TARGETING_KEYS = ['program_type', 'attendance_nature'];
+
+        // Parses courses.section_pages — which page each of the 8 targeting
+        // fields, plus "documents" (Required Documents) and "allocations"
+        // (Institutional Allocations / Chair Mapping, which has no
+        // participant-facing content of its own — see the "Page Content"
+        // block comment above beginRegistrationPaging), is configured for.
+        // A key missing from this object means page 1 (every activity
+        // created before this feature exists looks exactly like this).
+        function getSectionPages(course) {
+            let sp = {};
+            try {
+                const raw = course ? course.section_pages : null;
+                sp = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+            } catch (e) { sp = {}; }
+            return (sp && typeof sp === 'object') ? sp : {};
+        }
+
+        // Parses courses.page_titles — { "1": "Getting Started", "2": "..." },
+        // string keys since JSON object keys always are. A page with no key
+        // here shows no heading at all.
+        function getPageTitles(course) {
+            let pt = {};
+            try {
+                const raw = course ? course.page_titles : null;
+                pt = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+            } catch (e) { pt = {}; }
+            return (pt && typeof pt === 'object') ? pt : {};
+        }
+
+        // Fields that only appear once a course has been chosen
+        const REST_OF_FORM_IDS = [
+            'staffName', 'staffNumber', 'phoneNumber', 'sexSelect',
+            'designationFieldWrapper', 'specializationInput',
+            'institutionFieldWrapper', 'submitRowContainer',
+            ...TARGETING_FIELDS.map(f => 'regFieldWrapper_' + f.key)
+        ];
+        // Same list minus the Register button — used wherever ALL of these
+        // fields need to be shown/hidden together regardless of which of
+        // the two sub-steps below they belong to (switching activities,
+        // closing the form entirely).
+        const IDENTITY_FIELD_IDS = REST_OF_FORM_IDS.filter(id => id !== 'submitRowContainer');
+        // The "identity" step used to be one single reveal covering both of
+        // these groups at once — split so Activity Content can be anchored
+        // between them too (matching Create Activity's own "Basic Course
+        // Information" vs "Target Designations & Seats" sections): the
+        // participant's own name/phone/institution fields (now handled per
+        // page by IDENTITY_FIELD_PAGE_MAP / applyIdentityFieldPageVisibility
+        // below) vs the eligibility/targeting fields the admin configured
+        // per-course (targeting) — see buildRegistrationSteps.
+        const TARGETING_FIELD_IDS = TARGETING_FIELDS.map(f => 'regFieldWrapper_' + f.key);
+
+        function toggleFormVisibility(show) {
+            REST_OF_FORM_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.toggle('hidden-element', !show);
+            });
+            const uploads = document.getElementById('dynamicUploadsContainer');
+            if (uploads) uploads.classList.toggle('hidden-element', !show);
+            document.querySelectorAll('[id^="cqStepWrapper_"]').forEach(el => el.classList.toggle('hidden-element', !show));
+            // Closing the rest of the form (closed activity, no course
+            // chosen, already registered, not eligible) also closes the
+            // page-navigation footer left open from a previous selection —
+            // re-opening it is beginRegistrationPaging's own job.
+            if (!show) {
+                const nav = document.getElementById('regPageNavContainer');
+                if (nav) nav.classList.add('hidden-element');
+                regPages = [];
+                regPageIndex = 0;
+                regPagesResolvedForCourse = null;
+                regPagesActiveCourse = null;
+
+                const heading = document.getElementById('regPageHeadingWrapper');
+                if (heading) heading.classList.add('hidden-element');
+                const pcContainer = document.getElementById('pageContentContainer');
+                if (pcContainer) pcContainer.innerHTML = '';
+                pageContentCache = [];
+            }
+        }
+
+        // ====================================================================
+        // Registration Form paging — every Custom Question (course_questions)
+        // and Page Content block (activity_contents) has a "page" number set
+        // in Create Activity, defaulting to 1; each of the 8 targeting
+        // fields, the Required Documents section, and the Institutional
+        // Allocations section (courses.section_pages — the latter has no
+        // participant-facing content of its own, see loadPageContentForCourse
+        // below) also each carry their own page number this same way. Page 1
+        // always contains the fixed Basic Course Information identity
+        // fields, plus whichever of the above are configured for page 1 —
+        // this reveals right away exactly as it always has. If anything is
+        // configured for page 2 or later, a Next/Previous footer walks the
+        // participant through those extra pages one at a time, with the
+        // Register button only appearing on the last page. An Activity with
+        // everything on page 1 (or nothing page-configurable at all) behaves
+        // exactly as before — no footer, nothing to pause on.
+        // ====================================================================
+        let regPages = []; // e.g. [1, 2, 3] — the page numbers actually in use for this course
+        let regPageIndex = 0; // index into regPages of the page currently shown
+        let regPagesResolvedForCourse = null; // the courseId already fully walked (reached its last page) this visit
+        let regPagesActiveCourse = null; // the courseId currently being built/walked for
+        let pageContentCache = []; // this course's activity_contents rows (Page Content blocks), fetched once per course selection
+
+        function highestQuestionPage(questions) {
+            return (questions || []).reduce((max, q) => Math.max(max, q.page_number || 1), 1);
+        }
+
+        // The overall page ceiling for this course — the largest page
+        // number configured ANYWHERE: Custom Questions, Page Content
+        // blocks, or any of the 8 targeting fields / Required Documents /
+        // Institutional Allocations (courses.section_pages).
+        function highestPageOverall(courseId) {
+            const course = coursesCached.find(c => c.id === courseId);
+            const sectionPages = getSectionPages(course);
+            let max = highestQuestionPage(customQuestionsCache);
+            Object.values(sectionPages).forEach(v => {
+                const n = Number(v);
+                if (Number.isFinite(n)) max = Math.max(max, n);
+            });
+            pageContentCache.forEach(b => { max = Math.max(max, b.page_number || 1); });
+            return max;
+        }
+
+        // Fetches this course's optional Page Content blocks (Title + body
+        // text tied to a page number — see sql/course-page-content.sql).
+        // Cached the same way customQuestionsCache is, so revealing a page
+        // doesn't need its own round trip.
+        async function loadPageContentForCourse(courseId) {
+            if (!courseId) { pageContentCache = []; return; }
+            const { data, error } = await client
+                .from('activity_contents')
+                .select('*')
+                .eq('course_id', courseId)
+                .order('content_order', { ascending: true });
+            if (error) {
+                console.error('Could not load page content for course', courseId, error);
+                pageContentCache = [];
+                return;
+            }
+            pageContentCache = data || [];
+        }
+
+        // Renders whichever Page Content blocks belong to the page
+        // currently on screen — deliberately placed in the DOM (see
+        // register.html) before the per-page targeting fields and Custom
+        // Questions, so content reads as an intro to that page rather than
+        // trailing after its fields.
+        function renderPageContentBlocksForPage(pageNum) {
+            const container = document.getElementById('pageContentContainer');
+            if (!container) return;
+            const blocks = pageContentCache.filter(b => (b.page_number || 1) === pageNum);
+            if (blocks.length === 0) { container.innerHTML = ''; return; }
+            container.innerHTML = blocks.map(b => `
+                <div class="reg-page-content-block" style="margin-bottom:16px;">
+                    ${b.title ? `<h4 style="margin:0 0 6px; font-size:15px; font-weight:800; color:#0f172a;">${b.title}</h4>` : ''}
+                    <div style="font-size:14px; line-height:1.6; color:#334155; white-space:pre-line;">${b.content || ''}</div>
+                </div>
+            `).join('');
+        }
+
+        // The registrant's own fixed identity fields (Full Name, Staff
+        // Number, Gender, Designation, Current Post, Phone Number,
+        // Department) used to always reveal on page 1 and then stay visible
+        // for every later page too — see IDENTITY_FIELD_PAGE_MAP below and
+        // Create Activity's Section 1 "Registrant Information Fields" for
+        // where an admin sets each one's page (courses.section_pages, same
+        // keys). Defaults to page 1 when unset, so an activity that's never
+        // touched this still behaves exactly as before.
+        const IDENTITY_FIELD_PAGE_MAP = {
+            staffName: 'name',
+            staffNumber: 'staff_number',
+            phoneNumber: 'phone',
+            sexSelect: 'gender',
+            designationFieldWrapper: 'designation',
+            specializationInput: 'specialization',
+            institutionFieldWrapper: 'department'
+        };
+        function applyIdentityFieldPageVisibility(courseId, pageNum) {
+            const course = coursesCached.find(c => c.id === courseId);
+            const sectionPages = getSectionPages(course);
+            Object.entries(IDENTITY_FIELD_PAGE_MAP).forEach(([id, key]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const fieldPage = sectionPages[key] || 1;
+                el.classList.toggle('hidden-element', fieldPage !== pageNum);
+            });
+
+            // departmentContainer ("Select Department") and
+            // otherInstitutionContainer are siblings of institutionFieldWrapper,
+            // not children of it — renderInstitutionFields() reveals whichever
+            // one matches the chosen Institution type, but nothing re-hides
+            // them again when the page changes, so they used to keep showing
+            // on every later page once opened once. Tied to the same
+            // "department" page as institutionFieldWrapper here: hidden
+            // outright off that page, and restored to whichever one actually
+            // matches the current Institution selection when back on it.
+            const onDeptPage = (sectionPages.department || 1) === pageNum;
+            const deptContainer = document.getElementById('departmentContainer');
+            const otherContainer = document.getElementById('otherInstitutionContainer');
+            if (!onDeptPage) {
+                if (deptContainer) deptContainer.classList.add('hidden-element');
+                if (otherContainer) otherContainer.classList.add('hidden-element');
+            } else {
+                renderInstitutionFields();
+            }
+        }
+
+        // Whether a targeting field's wrapper should be treated as hidden
+        // for THIS course entirely (its "Show to registrants" toggle is
+        // off, or no course is selected) — set by
+        // updateTargetingSelectOptionsForCourse, read by
+        // applyTargetingFieldPageVisibility below. Kept as a data attribute
+        // (rather than just hidden-element itself) so the two concerns —
+        // "is this field offered on this course at all" vs. "is this the
+        // page it's configured for" — don't fight over the same class.
+        function applyTargetingFieldPageVisibility(courseId, pageNum) {
+            const course = coursesCached.find(c => c.id === courseId);
+            const sectionPages = getSectionPages(course);
+            TARGETING_FIELDS.forEach(field => {
+                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
+                if (!wrapper) return;
+                if (wrapper.dataset.hiddenForCourse === 'true') {
+                    wrapper.classList.add('hidden-element');
+                    return;
+                }
+                const fieldPage = sectionPages[field.key] || 1;
+                wrapper.classList.toggle('hidden-element', fieldPage !== pageNum);
+            });
+        }
+
+        // Reveals exactly one page's worth of content: the matching Page
+        // Content blocks, identity fields, targeting fields, Required
+        // Documents section, and Custom Questions — hiding every other
+        // page's. Each identity field (Full Name, Staff Number, ...) now
+        // shows ONLY on its own configured page (default page 1), same as
+        // the targeting fields — a page no longer keeps showing every
+        // earlier page's fields alongside its own.
+        function revealRegistrationPage(courseId, pageNum) {
+            const course = coursesCached.find(c => c.id === courseId);
+            const sectionPages = getSectionPages(course);
+            const pageTitles = getPageTitles(course);
+
+            if (pageNum === 1) {
+                // Rebuilds each targeting select's option list and re-applies
+                // per-field "Show to registrants" rules — only needs doing
+                // once, when page 1 first reveals (the option lists
+                // themselves don't change per page, only which page a
+                // field's wrapper is visible on, handled below).
+                updateTargetingSelectOptionsForCourse(courseId);
+            }
+
+            applyIdentityFieldPageVisibility(courseId, pageNum);
+            applyTargetingFieldPageVisibility(courseId, pageNum);
+
+            const docs = document.getElementById('dynamicUploadsContainer');
+            if (docs) {
+                const docsPage = sectionPages.documents || 1;
+                docs.classList.toggle('hidden-element', docsPage !== pageNum);
+            }
+
+            customQuestionsCache.forEach((q, idx) => {
+                const el = document.getElementById('cqStepWrapper_' + idx);
+                if (!el) return;
+                el.classList.toggle('hidden-element', (q.page_number || 1) !== pageNum);
+            });
+
+            renderPageContentBlocksForPage(pageNum);
+
+            const headingWrapper = document.getElementById('regPageHeadingWrapper');
+            const heading = document.getElementById('regPageHeading');
+            if (headingWrapper && heading) {
+                const title = pageTitles[String(pageNum)];
+                if (title) {
+                    heading.textContent = title;
+                    headingWrapper.classList.remove('hidden-element');
+                } else {
+                    headingWrapper.classList.add('hidden-element');
+                }
+            }
+        }
+
+        // Checks everything actually SHOWN on the current registration page
+        // has been filled in — called by the Next button so a participant
+        // can't skip ahead leaving something on an earlier page blank.
+        // Deliberately not native HTML5 validation (there's no <form>
+        // element here, and even if there were, a required field hidden on
+        // a different page can't be focused for the native validation
+        // bubble, which silently blocks everything — the exact bug fixed
+        // in Create Activity's hall booking rows). This mirrors the same
+        // required-field rules handleSubmit() checks right before saving —
+        // nothing here is stricter than what Submit already requires, it
+        // just catches it earlier, one page at a time.
+        function validateCurrentRegPage() {
+            const missing = [];
+
+            Object.keys(IDENTITY_FIELD_PAGE_MAP).forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || el.classList.contains('hidden-element')) return;
+                if (id === 'staffName') {
+                    const v = document.getElementById('staffName').value.trim();
+                    if (!v) missing.push('Full Name');
+                    else if (v.split(/\s+/).filter(Boolean).length < 2) missing.push('Full Name (first and last name)');
+                } else if (id === 'staffNumber') {
+                    if (!document.getElementById('staffNumber').value.trim()) missing.push('Staff Number');
+                } else if (id === 'phoneNumber') {
+                    if (!document.getElementById('phoneNumber').value.trim()) missing.push('Phone Number');
+                } else if (id === 'sexSelect') {
+                    if (!document.getElementById('sexSelect').value) missing.push('Gender');
+                } else if (id === 'designationFieldWrapper') {
+                    const sel = document.getElementById('designationSelect').value;
+                    if (!sel) missing.push('Designation');
+                    else if (sel === 'Other' && !document.getElementById('otherDesignationInput').value.trim()) missing.push('Designation (please specify)');
+                } else if (id === 'specializationInput') {
+                    if (!document.getElementById('specializationInput').value.trim()) missing.push('Current Post');
+                } else if (id === 'institutionFieldWrapper') {
+                    const instType = document.getElementById('institutionTypeSelect').value;
+                    if (!instType) {
+                        missing.push('Department');
+                    } else if (instType === 'Ibra') {
+                        if (!document.getElementById('departmentSelect').value) missing.push('Department');
+                    } else {
+                        const otherText = document.getElementById('otherInstitutionInput').value;
+                        if (!otherText) missing.push('Institution');
+                        else if (otherText === OTHER_CATCHALL_NAME && !document.getElementById('otherInstitutionFreeText').value.trim()) missing.push('Institution name');
+                    }
+                }
+            });
+
+            for (const field of TARGETING_FIELDS) {
+                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
+                if (!wrapper || wrapper.classList.contains('hidden-element')) continue;
+                const select = document.getElementById('reg_' + field.key);
+                if (select && !select.value) missing.push(field.label);
+            }
+
+            const uploads = document.getElementById('dynamicUploadsContainer');
+            if (uploads && !uploads.classList.contains('hidden-element')) {
+                uploads.querySelectorAll('.custom-file-target').forEach(input => {
+                    if (!input.files || input.files.length === 0) missing.push(`Document: ${input.getAttribute('data-label')}`);
+                });
+            }
+
+            missing.push(...getMissingCustomQuestionLabels(true));
+
+            return missing;
+        }
+
+        function updateRegPageNav(courseId) {
+            const nav = document.getElementById('regPageNavContainer');
+            const prevBtn = document.getElementById('regPagePrevBtn');
+            const nextBtn = document.getElementById('regPageNextBtn');
+            const submitRow = document.getElementById('submitRowContainer');
+            const isLast = regPageIndex === regPages.length - 1;
+
+            prevBtn.classList.toggle('hidden-element', regPageIndex === 0);
+            nextBtn.classList.toggle('hidden-element', isLast);
+            if (submitRow) submitRow.classList.toggle('hidden-element', !isLast);
+            if (isLast) regPagesResolvedForCourse = courseId;
+
+            prevBtn.onclick = () => {
+                if (regPageIndex === 0) return;
+                regPageIndex--;
+                revealRegistrationPage(courseId, regPages[regPageIndex]);
+                updateRegPageNav(courseId);
+            };
+            nextBtn.onclick = () => {
+                if (regPageIndex >= regPages.length - 1) return;
+                const missing = validateCurrentRegPage();
+                if (missing.length > 0) {
+                    alert(`Please complete before continuing: ${missing.join(', ')}.`);
+                    return;
+                }
+                regPageIndex++;
+                revealRegistrationPage(courseId, regPages[regPageIndex]);
+                updateRegPageNav(courseId);
+            };
+
+            nav.classList.remove('hidden-element');
+        }
+
+        function beginRegistrationPaging(courseId) {
+            if (regPagesResolvedForCourse === courseId) {
+                // Already walked all the way to this Activity's last page
+                // this visit (e.g. handleCourseSelectionChange re-ran
+                // because a targeting field changed) — everything real
+                // stays exactly as revealed.
+                return;
+            }
+
+            if (regPagesActiveCourse !== courseId) {
+                // A genuinely different Activity than whatever was mid-walk
+                // before — hide everything real first so nothing from the
+                // previous Activity's pages stays visible underneath the
+                // new one's.
+                IDENTITY_FIELD_IDS.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.add('hidden-element');
+                });
+                const uploads = document.getElementById('dynamicUploadsContainer');
+                if (uploads) uploads.classList.add('hidden-element');
+                document.querySelectorAll('[id^="cqStepWrapper_"]').forEach(el => el.classList.add('hidden-element'));
+                const submitRow = document.getElementById('submitRowContainer');
+                if (submitRow) submitRow.classList.add('hidden-element');
+                const nav = document.getElementById('regPageNavContainer');
+                if (nav) nav.classList.add('hidden-element');
+                const headingWrapper = document.getElementById('regPageHeadingWrapper');
+                if (headingWrapper) headingWrapper.classList.add('hidden-element');
+                const pcContainer = document.getElementById('pageContentContainer');
+                if (pcContainer) pcContainer.innerHTML = '';
+            }
+            regPagesActiveCourse = courseId;
+
+            const maxPage = highestPageOverall(courseId);
+            regPages = [];
+            for (let p = 1; p <= maxPage; p++) regPages.push(p);
+            regPageIndex = 0;
+
+            // Page 1's fixed sections + page-1 questions reveal immediately,
+            // same as always.
+            revealRegistrationPage(courseId, 1);
+
+            if (regPages.length <= 1) {
+                // Nothing past page 1 — no footer needed, Register button
+                // shows right away exactly as before paging existed.
+                const submitRow = document.getElementById('submitRowContainer');
+                if (submitRow) submitRow.classList.remove('hidden-element');
+                regPagesResolvedForCourse = courseId;
+            } else {
+                updateRegPageNav(courseId);
+            }
+        }
+
+        // ====================================================================
+        // Staff Number step — "one participant, one staff number, one
+        // participant record, many course registrations" (see sql/participants.sql).
+        // A course selection reveals ONLY this step first; the rest of the
+        // form (REST_OF_FORM_IDS above) only appears once this resolves —
+        // either an existing participant is found and their saved info is
+        // loaded, or the staff number is new and the form opens blank, same
+        // as it always has.
+        // ====================================================================
+        let matchedParticipant = null; // the participants row found for the entered staff number, or null for a brand-new one
+        let enteredStaffNumberRaw = ''; // what they actually typed at the gate, for the brand-new (no match) case
+
+        // Strips invisible direction/zero-width marks (an Arabic keyboard or a
+        // copy-paste from WhatsApp/Excel often adds one in front of the number,
+        // e.g. "\u200F56553"), converts Arabic-Indic / Persian digits to
+        // 0-9, and trims — so the same person can never end up with two
+        // "different" staff numbers that merely look identical on screen.
+        function cleanStaffNumber(raw) {
+            return String(raw || '')
+                .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u00AD]/g, '')
+                .replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g, ' ')
+                .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+                .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function normalizeStaffNumber(raw) {
+            return cleanStaffNumber(raw).toLowerCase();
+        }
+
+        function setAlreadyRegisteredNoticeVisible(show) {
+            document.getElementById('alreadyRegisteredNotice').classList.toggle('hidden-element', !show);
+            document.getElementById('closeAlreadyRegisteredBtn').classList.toggle('hidden-element', !show);
+        }
+
+        // ====================================================================
+        // Exam gate notice — shown instead of the registration form when the
+        // selected course has an Exam (activity_exams) assigned to it and
+        // this staff number hasn't completed it yet. See the exam-gate block
+        // in handleCourseSelectionChange for when this fires.
+        // ====================================================================
+        function setExamRequiredNotice(examLink) {
+            const box = document.getElementById('examRequiredNotice');
+            const linkBtn = document.getElementById('examRequiredLinkBtn');
+            if (!box || !linkBtn) return;
+            box.classList.toggle('hidden-element', !examLink);
+            if (examLink) linkBtn.href = examLink;
+        }
+
+        // Best-effort: submits an expired in_progress exam attempt as an
+        // empty attempt (see the exam-gate block's comment for why an empty
+        // submission is the right, documented fallback here). Mirrors
+        // js/exam-public.js's submitExamAttempt, minimally duplicated since
+        // this is a different entry page with its own bundle.
+        async function autoSubmitExpiredExamAttempt(examId, attemptId) {
+            try {
+                const { data: questions } = await client.from('activity_exam_questions').select('id, points').eq('exam_id', examId);
+                const rows = (questions || []).map(q => ({
+                    attempt_id: attemptId,
+                    question_id: q.id,
+                    answer_value: null,
+                    // A 0-point question is never graded at all (see
+                    // gradeExamAnswer in js/exam-public.js) — is_correct is
+                    // null, not false, for the same "not graded" vs "graded
+                    // and wrong" distinction, even on this empty/auto-
+                    // submitted fallback path.
+                    is_correct: (Number(q.points) || 0) === 0 ? null : false,
+                    points_earned: 0
+                }));
+                if (rows.length > 0) await client.from('activity_exam_answers').insert(rows);
+                const maxScore = (questions || []).reduce((sum, q) => sum + (Number(q.points) || 0), 0);
+                await client.from('activity_exam_attempts').update({
+                    status: 'submitted',
+                    submitted_at: new Date().toISOString(),
+                    total_score: 0,
+                    max_score: maxScore
+                }).eq('id', attemptId);
+            } catch (e) {
+                // Non-fatal — registration still proceeds either way; worst
+                // case the attempt stays in_progress and expired, which the
+                // Exam Participants admin page already shows as "Expired".
+            }
+        }
+
+        function setNotEligibleNotice(message) {
+            const box = document.getElementById('notEligibleNotice');
+            box.textContent = message || '';
+            box.classList.toggle('hidden-element', !message);
+            document.getElementById('closeNotEligibleBtn').classList.toggle('hidden-element', !message);
+        }
+
+        // Checks a RETURNING participant's own saved profile against this
+        // course's eligibility rules — a brand-new (unmatched) staff number
+        // has nothing saved to conflict with yet, so this only ever runs
+        // for a match. Course-specific answers (the 8 targeting fields,
+        // designation, institution) are only a real restriction when the
+        // course actually narrows them — an untouched "All"/empty value
+        // means anyone qualifies, so those are skipped rather than flagged.
+        function getEligibilityBlockReason(participant, course, courseId) {
+            // Every sibling helper that takes a possibly-missing course
+            // guards this the same way (getSectionPages, filterIbraDepartments,
+            // etc.) — this one didn't, so a course that went missing from
+            // coursesCached between render and this call would throw here
+            // instead of just treating it as "nothing to check yet".
+            if (!course) return null;
+            if (course.allowed_sex === 'Male' && participant.sex && participant.sex !== 'Male') {
+                return 'This activity is open to Male participants only, and your saved profile has you as Female.';
+            }
+            if (course.allowed_sex === 'Female' && participant.sex && participant.sex !== 'Female') {
+                return 'This activity is open to Female participants only, and your saved profile has you as Male.';
+            }
+
+            if (course.allowed_designations) {
+                let list;
+                try {
+                    list = Array.isArray(course.allowed_designations) ? course.allowed_designations : JSON.parse(course.allowed_designations);
+                } catch (e) { list = null; }
+                if (Array.isArray(list) && list.length > 0 && !list.includes('All') && participant.designation_category && !list.includes(participant.designation_category)) {
+                    return `This activity is limited to specific designations, and your saved designation (${participant.designation_category}) isn't one of them.`;
+                }
+            }
+
+            const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
+            if (mappingsForCourse.length > 0 && participant.institution_id && !course.unlimited_seats) {
+                const isAllowed = mappingsForCourse.some(m => m.institution_id === participant.institution_id);
+                if (!isAllowed) {
+                    return 'This activity is limited to specific institutions/departments, and your saved institution isn\'t one of them.';
+                }
+            }
+
+            for (const field of TARGETING_FIELDS) {
+                let list;
+                try {
+                    const raw = course[field.key];
+                    list = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim() !== '' ? JSON.parse(raw) : []);
+                } catch (e) { list = []; }
+                if (list.length === 0 || list.includes('All')) continue;
+                const participantValue = participant[field.key];
+                if (participantValue && !list.includes(participantValue)) {
+                    return `This activity requires a specific ${field.label}, and your saved ${field.label} (${participantValue}) doesn't match.`;
+                }
+            }
+
+            return null;
+        }
+
+        function resetStaffGate() {
+            matchedParticipant = null;
+            enteredStaffNumberRaw = '';
+            unlockProfileFields();
+            document.getElementById('staffNumberGateInput').value = '';
+            document.getElementById('staffGateMessage').classList.add('hidden-element');
+            document.getElementById('staffGateSummary').classList.add('hidden-element');
+            document.getElementById('staffGateWrapper').classList.remove('hidden-element');
+            document.getElementById('courseSelectWrapper').classList.add('hidden-element');
+            setAlreadyRegisteredNoticeVisible(false);
+            setNotEligibleNotice(null);
+            setExamRequiredNotice(null);
+            // A direct activity link locks the dropdown to one course (see
+            // applyDirectCourseLinkFromUrl) — that choice isn't the
+            // participant's to change, so it's left alone here; only the
+            // free-choice picker gets cleared back to blank.
+            const courseDropdown = document.getElementById('courseSelect');
+            if (!courseDropdown.disabled) courseDropdown.value = '';
+            toggleFormVisibility(false);
+
+            // Not part of REST_OF_FORM_IDS (it only shows for non-attendance
+            // courses, toggled separately in handleCourseSelectionChange),
+            // so without this it — and whatever was typed into it — would
+            // keep showing after "Change staff number" even though the
+            // rest of the form just closed.
+            document.getElementById('firstLogEntryContainer').classList.add('hidden-element');
+            document.getElementById('firstLogTitle').value = '';
+            document.getElementById('firstLogDept').value = '';
+            document.getElementById('firstLogDateFrom').value = '';
+            document.getElementById('firstLogDateTo').value = '';
+        }
+
+        // Loads a matched participant's saved info into the (still-hidden)
+        // rest-of-form fields. Institution/department options are filtered
+        // per-course (filterIbraDepartments/filterOtherInstitutions), so a
+        // saved institution that isn't offered for THIS course is simply
+        // left for the participant to re-pick rather than forced in —
+        // graceful degradation instead of a broken/invisible selection.
+        function prefillFromParticipant(p) {
+            document.getElementById('staffName').value = p.staff_name || '';
+            document.getElementById('phoneNumber').value = p.phone_number || '';
+            document.getElementById('specializationInput').value = p.specialization || '';
+
+            // Gender: same graceful-degradation rule as Designation and
+            // Institution below — a course can restrict registration to
+            // one gender only (course.allowed_sex, applied by
+            // updateGenderOptionsForCourse just before this runs), which
+            // removes the other option from the dropdown entirely. Setting
+            // sexSelect.value to a saved gender that isn't offered by THIS
+            // course silently selects nothing (no matching option), so
+            // only commit to it when it's actually still available;
+            // otherwise leave it blank for the participant to confirm
+            // themselves rather than locking an empty selection.
+            const sexSelect = document.getElementById('sexSelect');
+            const sexMatched = !p.sex || Array.from(sexSelect.options).some(o => o.value === p.sex);
+            sexSelect.value = sexMatched ? (p.sex || '') : '';
+
+            // Same graceful-degradation rule as Designation below: a
+            // course can restrict which institutions/departments it even
+            // offers (courseInstitutionsMapCached — see filterIbraDepartments
+            // / filterOtherInstitutions), removing any option this course
+            // doesn't allow entirely from the dropdown rather than just
+            // disabling it. Forcing institutionTypeSelect to "Ibra"/"Other"
+            // and leaving the actual department/institution dropdown
+            // unmatched used to produce a LOCKED field showing no real
+            // value — the participant couldn't fix it, and submitting
+            // failed with "Please select your institution name" because
+            // the underlying select was genuinely empty. Now: only commit
+            // to the saved institution if this course's filtered option
+            // list actually contains it; otherwise reset back to blank so
+            // it's left open for them to pick one this course actually
+            // offers.
+            const isIbra = (p.institution_name || '').startsWith('Ibra - ');
+            const instTypeSelect = document.getElementById('institutionTypeSelect');
+            instTypeSelect.value = isIbra ? 'Ibra' : (p.institution_name ? 'Other' : '');
+            renderInstitutionFields();
+            let institutionMatched = !p.institution_name; // nothing saved yet is not a mismatch
+            if (isIbra) {
+                const dept = (p.institution_name || '').replace('Ibra - ', '');
+                const deptSelect = document.getElementById('departmentSelect');
+                institutionMatched = Array.from(deptSelect.options).some(o => o.value === dept);
+                if (institutionMatched) deptSelect.value = dept;
+            } else if (p.institution_name) {
+                const otherSelect = document.getElementById('otherInstitutionInput');
+                // A saved free-text "Other" institution isn't stored as the
+                // plain select value — handleSubmit saves it as the
+                // composite "Other (Please Specify): <what they typed>"
+                // (OTHER_CATCHALL_NAME + their free text), while the select
+                // option itself is just the bare OTHER_CATCHALL_NAME. Without
+                // this split, the composite string never matches any option
+                // here, so this whole subgroup's institution silently reset
+                // to blank on every later visit despite being saved
+                // correctly. filterOtherInstitutions already recognizes this
+                // same composite format elsewhere (its `.startsWith` check)
+                // — this mirrors it.
+                const catchAllPrefix = `${OTHER_CATCHALL_NAME}: `;
+                const isCatchAllSaved = p.institution_name.startsWith(catchAllPrefix);
+                const savedFreeText = isCatchAllSaved ? p.institution_name.slice(catchAllPrefix.length) : '';
+                const matchTarget = isCatchAllSaved ? OTHER_CATCHALL_NAME : p.institution_name;
+                institutionMatched = Array.from(otherSelect.options).some(o => o.value === matchTarget);
+                if (institutionMatched) {
+                    otherSelect.value = matchTarget;
+                    handleOtherInstitutionChange();
+                    if (isCatchAllSaved) {
+                        document.getElementById('otherInstitutionFreeText').value = savedFreeText;
+                    }
+                }
+            }
+            if (!institutionMatched) {
+                instTypeSelect.value = '';
+                renderInstitutionFields();
+            }
+
+            // Only prefill Designation if this course's (possibly
+            // restricted — see allowed_designations) option list actually
+            // includes the participant's saved designation_category. If it
+            // doesn't, this course simply offers a different set of
+            // designations than whichever course they last registered for
+            // — leave it blank so they pick the right one themselves,
+            // rather than guessing "Other (Please Specify)" and stuffing
+            // their real designation into that free-text box, which looked
+            // like a wrong, locked answer they never actually chose.
+            const designationSelect = document.getElementById('designationSelect');
+            if (p.designation_category && Array.from(designationSelect.options).some(o => o.value === p.designation_category)) {
+                designationSelect.value = p.designation_category;
+                if (p.designation_category === 'Other') {
+                    document.getElementById('otherDesignationInput').value = p.designation || '';
+                }
+            }
+            handleDesignationChange();
+
+            // Job Level, Nationality, Highest Educational Qualification,
+            // Experience Years, Organization — same graceful-degradation
+            // rule as institution/department above: only set if this
+            // course actually offers that value as an option (its
+            // available options are course-specific, populated just
+            // before this by updateTargetingSelectOptionsForCourse), left
+            // blank for the participant to fill in themselves otherwise.
+            // Directorate, Type of Program, and Nature of Attendance are
+            // deliberately skipped here — they change per activity, so
+            // every registration starts them blank rather than carrying
+            // over whatever was picked for a previous course.
+            TARGETING_FIELDS.forEach(field => {
+                if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
+                const select = document.getElementById('reg_' + field.key);
+                const savedValue = p[field.key];
+                if (select && savedValue && Array.from(select.options).some(o => o.value === savedValue)) {
+                    select.value = savedValue;
+                }
+            });
+        }
+
+        // A participant's core personal/professional info is captured once
+        // per CALENDAR YEAR and reused for every registration within that
+        // year — not retyped (and potentially drifted) on every single
+        // registration, but also not frozen forever, since a department,
+        // designation, etc. can genuinely change year to year. participants
+        // .profile_year (sql/add-participant-profile-year.sql) records which
+        // year the saved fields were last confirmed for.
+        function isProfileCurrentForThisYear(p) {
+            return !!p && Number(p.profile_year) === new Date().getFullYear();
+        }
+
+        // For a staff number whose saved profile IS current for this year,
+        // these fields get prefilled (prefillFromParticipant, above) and
+        // then locked here so the participant can only view them; correcting
+        // a mistake is an admin-only action (Participant Registrations /
+        // Edit Participant, js/students.js), never something done by
+        // re-registering. Once a new year starts, isProfileCurrentForThisYear
+        // goes false and these same fields are left editable (still
+        // prefilled with last year's values as a starting point) until
+        // they're saved again — see the profileRefreshNotice branch below.
+        // "Current Post" (specializationInput) is included since it's asked
+        // at every registration today but is meant to describe the
+        // participant themselves, same as the rest. "Gender" (sexSelect),
+        // "Designation" (designationSelect / otherDesignationInput), and
+        // institution (institutionTypeSelect / departmentSelect /
+        // otherInstitutionInput / otherInstitutionFreeText) are all handled
+        // separately below instead of being blanket-locked here — a course
+        // can restrict which genders, designations, and
+        // institutions/departments it even offers (allowed_sex,
+        // allowed_designations, courseInstitutionsMapCached), removing an
+        // option this course doesn't allow entirely rather than just
+        // disabling it. Locking these unconditionally used to leave a
+        // returning participant staring at a locked field with no real
+        // value selected whenever this course's restricted list didn't
+        // include their saved answer — unfixable, and failing at submit
+        // with "Please select your institution name"/designation/"Please
+        // complete all text fields...". See lockProfileFieldsForReturningParticipant.
+        const LOCKABLE_CORE_FIELD_IDS = [
+            'staffName', 'phoneNumber', 'specializationInput'
+        ];
+
+        // Called at the very end of handleCourseSelectionChange, once every
+        // rebuild that touches these fields' option lists (targeting
+        // selects in particular — see updateTargetingSelectOptionsForCourse,
+        // which only ever runs as part of revealing page 1) has already
+        // happened — locking any earlier wouldn't survive those rebuilds.
+        function lockProfileFieldsForReturningParticipant(p) {
+            LOCKABLE_CORE_FIELD_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = true;
+            });
+
+            // Designation: only lock it if the participant's saved
+            // designation_category is actually one of this course's
+            // currently offered options (updateDesignationOptionsForCourse,
+            // called before prefillFromParticipant, already filtered the
+            // select down to this course's allowed_designations). If it
+            // isn't — a different course restricting designations
+            // differently — prefillFromParticipant leaves the field blank
+            // rather than guessing "Other", so leave it unlocked here too,
+            // letting the participant pick the right one for THIS activity
+            // instead of being stuck looking like they chose "Other".
+            //
+            // Every branch below sets .disabled EXPLICITLY (both the locked
+            // and the not-locked case) rather than only ever setting it
+            // true — the course dropdown has no guard against being
+            // changed again after this already ran once (handleCourseSelectionChange
+            // re-fires on every 'change'), so a field a PREVIOUS course
+            // locked must be actively re-enabled here if THIS course's
+            // value doesn't match, or it would stay stuck disabled-and-blank.
+            const designationSelect = document.getElementById('designationSelect');
+            const otherDesignationInput = document.getElementById('otherDesignationInput');
+            const designationMatched = !!(designationSelect && p.designation_category &&
+                Array.from(designationSelect.options).some(o => o.value === p.designation_category));
+            designationSelect.disabled = designationMatched;
+            otherDesignationInput.disabled = designationMatched && designationSelect.value === 'Other';
+
+            // Institution/department: same escape hatch. prefillFromParticipant
+            // already reset institutionTypeSelect back to '' whenever this
+            // course's filtered department/institution list didn't contain
+            // the participant's saved value — so a non-empty value here
+            // means it genuinely matched and was set, safe to lock.
+            const instTypeSelect = document.getElementById('institutionTypeSelect');
+            const departmentSelect = document.getElementById('departmentSelect');
+            const otherInstitutionInput = document.getElementById('otherInstitutionInput');
+            const otherInstitutionFreeText = document.getElementById('otherInstitutionFreeText');
+            const institutionMatchedIbra = instTypeSelect.value === 'Ibra';
+            const institutionMatchedOther = instTypeSelect.value === 'Other';
+            instTypeSelect.disabled = institutionMatchedIbra || institutionMatchedOther;
+            departmentSelect.disabled = institutionMatchedIbra;
+            otherInstitutionInput.disabled = institutionMatchedOther;
+            otherInstitutionFreeText.disabled = institutionMatchedOther && otherInstitutionInput.value === OTHER_CATCHALL_NAME;
+
+            // Gender: same escape hatch — only lock it if prefillFromParticipant
+            // actually found the saved gender among this course's (possibly
+            // restricted to one gender) options and set it.
+            const sexSelect = document.getElementById('sexSelect');
+            sexSelect.disabled = !!sexSelect.value;
+
+            // Targeting fields (Job Level, Nationality, ...) are course-
+            // dependent and only sometimes asked for — only lock (and
+            // re-apply, now that this course's filtered option list
+            // actually exists) the ones this participant already has a
+            // saved value for. One they've never been asked to supply
+            // before is left open so they can fill it in for the first
+            // time; it's then locked on every registration after that,
+            // same as the core fields above. Directorate, Type of Program,
+            // and Nature of Attendance are excluded — they describe this
+            // activity, not the participant, so they stay open and blank
+            // (never auto-filled from a past course) on every registration.
+            TARGETING_FIELDS.forEach(field => {
+                if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
+                const select = document.getElementById('reg_' + field.key);
+                if (!select) return;
+                const savedValue = p[field.key];
+                // Pre-existing gap fixed alongside the others above: this
+                // must set .disabled explicitly either way, not only when
+                // matched — the course dropdown can be changed again
+                // without a page reload, and a field a PREVIOUS course
+                // locked (disabled=true) needs to be actively unlocked here
+                // if THIS course's saved value isn't one of its options,
+                // or it stays stuck disabled-and-blank just like before.
+                const matched = !!(savedValue && Array.from(select.options).some(o => o.value === savedValue));
+                if (matched) select.value = savedValue;
+                select.disabled = matched;
+            });
+
+            document.getElementById('lockedProfileNotice').classList.remove('hidden-element');
+        }
+
+        // Undoes the above — needed when "Not you? Change staff number" is
+        // used, so a brand-new (unmatched) staff number entered right after
+        // doesn't inherit the previous participant's locked, disabled fields.
+        function unlockProfileFields() {
+            LOCKABLE_CORE_FIELD_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
+            ['designationSelect', 'otherDesignationInput', 'institutionTypeSelect',
+             'departmentSelect', 'otherInstitutionInput', 'otherInstitutionFreeText',
+             'sexSelect'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                if (select) select.disabled = false;
+            });
+            document.getElementById('lockedProfileNotice').classList.add('hidden-element');
+            document.getElementById('profileRefreshNotice').classList.add('hidden-element');
+        }
+
+        // Shown instead of the lock for a returning participant whose
+        // profile_year is behind the current year — the fields themselves
+        // are left blank (clearProfileFieldsForYearRefresh, below) so they
+        // actually retype their info rather than rubber-stamp last year's,
+        // with this banner explaining why a "registered before" staff
+        // number is suddenly asking for everything again.
+        function showProfileRefreshNotice() {
+            document.getElementById('lockedProfileNotice').classList.add('hidden-element');
+            document.getElementById('profileRefreshNotice').classList.remove('hidden-element');
+        }
+
+        // Blanks every locked-when-current-year field for a returning
+        // participant whose profile_year has fallen behind — used instead
+        // of prefillFromParticipant so last year's answers are never handed
+        // back to them, forcing an actual re-entry rather than a review.
+        function clearProfileFieldsForYearRefresh() {
+            document.getElementById('staffName').value = '';
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('sexSelect').value = '';
+            document.getElementById('specializationInput').value = '';
+            document.getElementById('designationSelect').value = '';
+            document.getElementById('otherDesignationInput').value = '';
+            document.getElementById('institutionTypeSelect').value = '';
+            document.getElementById('departmentSelect').value = '';
+            document.getElementById('otherInstitutionInput').value = '';
+            resetOtherFreeText();
+            renderInstitutionFields();
+            handleDesignationChange();
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                if (select) select.value = '';
+            });
+        }
+
+        async function handleStaffGateContinue() {
+            const btn = document.getElementById('staffGateContinueBtn');
+            const messageBox = document.getElementById('staffGateMessage');
+            const raw = cleanStaffNumber(document.getElementById('staffNumberGateInput').value);
+            const normalized = normalizeStaffNumber(raw);
+            messageBox.classList.add('hidden-element');
+
+            if (!raw) {
+                messageBox.textContent = 'Please enter your staff number.';
+                messageBox.classList.remove('hidden-element');
+                return;
+            }
+
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Checking…';
+
+            try {
+                const { data: participant } = await client
+                    .from('participants')
+                    .select('*')
+                    .eq('staff_number_normalized', normalized)
+                    .maybeSingle();
+
+                // Which course they're already registered for (if any) isn't
+                // knowable yet — course selection comes AFTER this step now.
+                // That check happens in handleCourseSelectionChange instead,
+                // once both the participant and a chosen course are known.
+                matchedParticipant = participant || null;
+                enteredStaffNumberRaw = raw;
+
+                document.getElementById('staffGateWrapper').classList.add('hidden-element');
+                const summary = document.getElementById('staffGateSummary');
+                document.getElementById('staffGateSummaryText').textContent = participant
+                    ? `Registering as ${participant.staff_name || participant.staff_number} (${participant.staff_number})`
+                    : `Staff Number: ${raw} (new registrant)`;
+                summary.classList.remove('hidden-element');
+                document.getElementById('courseSelectWrapper').classList.remove('hidden-element');
+
+                // A direct activity link (?course=...) pre-selects and locks
+                // the course dropdown BEFORE the staff gate even shows (see
+                // applyDirectCourseLinkFromUrl) — in that case a course is
+                // already chosen, so continue straight into course-specific
+                // setup instead of waiting for a 'change' event that will
+                // never fire on an already-correct, disabled dropdown.
+                if (document.getElementById('courseSelect').value) {
+                    handleCourseSelectionChange();
+                }
+            } catch (err) {
+                messageBox.textContent = 'Something went wrong looking up that staff number — please try again.';
+                messageBox.classList.remove('hidden-element');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function updateGenderOptionsForCourse(courseId) {
+            const select = document.getElementById('sexSelect');
+            const currentValue = select.value;
+            const course = coursesCached.find(c => c.id === courseId);
+            const allowedSex = course ? course.allowed_sex : null;
+
+            let allowed;
+            if (allowedSex === 'Male') {
+                allowed = [{ v: 'Male', t: 'Male' }];
+            } else if (allowedSex === 'Female') {
+                allowed = [{ v: 'Female', t: 'Female' }];
+            } else {
+                allowed = [{ v: 'Male', t: 'Male' }, { v: 'Female', t: 'Female' }];
+            }
+
+            let optionsHtml = '<option value="">-- Gender --</option>';
+            optionsHtml += allowed.map(o => `<option value="${o.v}">${o.t}</option>`).join('');
+            select.innerHTML = optionsHtml;
+
+            select.value = allowed.some(o => o.v === currentValue) ? currentValue : '';
+        }
+
+        function updateInstitutionTypeOptionsForCourse(courseId) {
+            const select = document.getElementById('institutionTypeSelect');
+            const currentValue = select.value;
+            const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
+
+            const course = coursesCached.find(c => c.id === courseId);
+            const hasIbra = mappingsForCourse.some(m => m.institutions?.name?.startsWith('Ibra - '));
+            const hasOther = mappingsForCourse.some(m => m.institutions?.name && !m.institutions.name.startsWith('Ibra - '));
+            // If no allocation has been configured for this course at all,
+            // or the course is unlimited-seats, fall back to showing both
+            // rather than blocking registration entirely — matches the same
+            // rule filterIbraDepartments/filterOtherInstitutions and the
+            // registration-time eligibility check already use.
+            const noMappingConfigured = mappingsForCourse.length === 0;
+            const isOpen = noMappingConfigured || !!(course && course.unlimited_seats);
+
+            let optionsHtml = '<option value="">-- Choose Institution Option --</option>';
+            if (hasIbra || isOpen) optionsHtml += '<option value="Ibra">Ibra hospital</option>';
+            if (hasOther || isOpen) optionsHtml += '<option value="Other">Other hospital and health center</option>';
+            select.innerHTML = optionsHtml;
+
+            const stillValid = (currentValue === 'Ibra' && (hasIbra || isOpen)) ||
+                                (currentValue === 'Other' && (hasOther || isOpen));
+            select.value = stillValid ? currentValue : '';
+        }
+
+        function updateDesignationOptionsForCourse(courseId) {
+            const select = document.getElementById('designationSelect');
+            const currentValue = select.value;
+            const course = coursesCached.find(c => c.id === courseId);
+
+            let allowed = DESIGNATION_OPTIONS;
+            if (course && course.allowed_designations) {
+                try {
+                    const list = Array.isArray(course.allowed_designations)
+                        ? course.allowed_designations
+                        : JSON.parse(course.allowed_designations);
+                    if (Array.isArray(list) && list.length > 0 && !list.includes('All')) {
+                        allowed = DESIGNATION_OPTIONS.filter(d => list.includes(d));
+                    }
+                } catch (e) {
+                    allowed = DESIGNATION_OPTIONS;
+                }
+            }
+
+            let designationSeatCaps = {};
+            try {
+                const raw = course ? course.designation_seats : null;
+                designationSeatCaps = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+            } catch (e) {
+                designationSeatCaps = {};
+            }
+
+            let optionsHtml = '<option value="">-- Designation --</option>';
+            let stillValidValue = false;
+            allowed.forEach(d => {
+                const cap = designationSeatCaps && designationSeatCaps[d];
+                let isClosed = false;
+                let suffix = '';
+                if (courseId && cap) {
+                    const filled = registrationLogsCached.filter(r => r.course_id === courseId && r.designation_category_snapshot === d).length;
+                    const remaining = Math.max(0, cap - filled);
+                    suffix = ` (${remaining} seats remaining)`;
+                    if (remaining <= 0) isClosed = true;
+                }
+                if (isClosed) {
+                    optionsHtml += `<option value="${d}" disabled style="color:#cbd5e1;">${d}${suffix} (FULL)</option>`;
+                } else {
+                    optionsHtml += `<option value="${d}">${d}${suffix}</option>`;
+                    if (d === currentValue) stillValidValue = true;
+                }
+            });
+
+            select.innerHTML = optionsHtml;
+
+            if (stillValidValue) {
+                select.value = currentValue;
+            } else {
+                select.value = '';
+                const otherInput = document.getElementById('otherDesignationInput');
+                otherInput.classList.add('hidden-element');
+                otherInput.required = false;
+                otherInput.value = '';
+            }
+        }
+
+        function handleDesignationChange() {
+            const select = document.getElementById('designationSelect');
+            const otherInput = document.getElementById('otherDesignationInput');
+            if (select.value === 'Other') {
+                otherInput.classList.remove('hidden-element');
+                otherInput.required = true;
+            } else {
+                otherInput.classList.add('hidden-element');
+                otherInput.required = false;
+                otherInput.value = '';
+            }
+            updateSelectableCoursesOptions();
+        }
+
+        function renderInstitutionFields() {
+            const selectedType = document.getElementById('institutionTypeSelect').value;
+            const deptContainer = document.getElementById('departmentContainer');
+            const otherContainer = document.getElementById('otherInstitutionContainer');
+            const courseId = Number(document.getElementById('courseSelect').value);
+
+            if (selectedType === 'Ibra') {
+                deptContainer.classList.remove('hidden-element');
+                otherContainer.classList.add('hidden-element');
+                document.getElementById('otherInstitutionInput').value = '';
+                resetOtherFreeText();
+                filterIbraDepartments(courseId);
+            } else if (selectedType === 'Other') {
+                otherContainer.classList.remove('hidden-element');
+                deptContainer.classList.add('hidden-element');
+                document.getElementById('departmentSelect').value = '';
+                filterOtherInstitutions(courseId);
+                handleOtherInstitutionChange();
+            } else {
+                deptContainer.classList.add('hidden-element');
+                otherContainer.classList.add('hidden-element');
+                document.getElementById('departmentSelect').value = '';
+                document.getElementById('otherInstitutionInput').value = '';
+                resetOtherFreeText();
+            }
+        }
+
+        function resetOtherFreeText() {
+            const freeText = document.getElementById('otherInstitutionFreeText');
+            freeText.value = '';
+            freeText.required = false;
+            freeText.classList.add('hidden-element');
+        }
+
+        function handleOtherInstitutionChange() {
+            const otherDropdown = document.getElementById('otherInstitutionInput');
+            const freeText = document.getElementById('otherInstitutionFreeText');
+            if (otherDropdown.value === OTHER_CATCHALL_NAME) {
+                freeText.classList.remove('hidden-element');
+                freeText.required = true;
+            } else {
+                resetOtherFreeText();
+            }
+        }
+
+        function filterIbraDepartments(courseId) {
+            const deptDropdown = document.getElementById('departmentSelect');
+            const currentSelected = deptDropdown.value;
+            const course = coursesCached.find(c => c.id === courseId);
+
+            // No institution mapping has been configured for this course AT
+            // ALL — the admin never restricted it to specific
+            // institutions/departments, meaning every department is
+            // allowed. This must match the registration-time check further
+            // down (courseHasNoMappingConfigured), or a department that's
+            // selectable here can still get rejected at submit.
+            const mappingsForCourse = courseId ? courseInstitutionsMapCached.filter(m => m.course_id === courseId) : [];
+            const courseHasNoMappingConfigured = courseId && mappingsForCourse.length === 0;
+
+            let html = '<option value="">-- Choose Department --</option>';
+            departmentsList.forEach(dept => {
+                let chairsLeftStr = '';
+                let isFull = false;
+                let isUnconfigured = false;
+
+                if (courseId) {
+                    const matchString = `Ibra - ${dept}`;
+                    const allocationConfig = courseInstitutionsMapCached.find(m => m.course_id === courseId && m.institutions?.name === matchString);
+
+                    if (allocationConfig) {
+                        // 0 means UNLIMITED for this institution specifically
+                        // — not zero chairs / closed.
+                        if (allocationConfig.max_slots !== 0) {
+                            const countFilled = registrationLogsCached.filter(r => r.course_id === courseId && r.institution_name_snapshot === matchString).length;
+                            const chairsLeft = Math.max(0, allocationConfig.max_slots - countFilled);
+                            chairsLeftStr = ` (${chairsLeft} chairs remaining)`;
+                            if (chairsLeft <= 0) isFull = true;
+                        }
+                    } else if (course && (course.unlimited_seats || courseHasNoMappingConfigured)) {
+                        // No allocation row at all for this institution on
+                        // this specific course. Treated as OPEN (no cap)
+                        // when either the course itself is unlimited-seats,
+                        // or — more generally — the admin never configured
+                        // ANY institution restriction for this course at
+                        // all, meaning "allow everyone". This happens for
+                        // any institution added to the global list AFTER
+                        // this course was created/saved too, since a row
+                        // only gets written at save time.
+                    } else {
+                        // A restriction WAS configured for this course, and
+                        // this department specifically wasn't included in
+                        // it — it must not appear as an option at all
+                        // rather than showing disabled and then failing
+                        // later at submission.
+                        isUnconfigured = true;
+                    }
+                }
+
+                if (isUnconfigured) return;
+
+                const selectedAttr = (dept === currentSelected) ? 'selected' : '';
+                if (!isFull) {
+                    html += `<option value="${dept}" ${selectedAttr}>${dept}${chairsLeftStr}</option>`;
+                } else {
+                    html += `<option value="${dept}" disabled style="color:#cbd5e1;" ${selectedAttr}>${dept} (FULL)</option>`;
+                }
+            });
+            deptDropdown.innerHTML = html;
+        }
+
+        function filterOtherInstitutions(courseId) {
+            const otherDropdown = document.getElementById('otherInstitutionInput');
+            const currentSelected = otherDropdown.value;
+            const options = Array.from(otherDropdown.options);
+            const course = coursesCached.find(c => c.id === courseId);
+
+            // No institution mapping has been configured for this course AT
+            // ALL — matches the same fallback used in filterIbraDepartments
+            // and at registration-submit time: no restriction configured
+            // means every institution is allowed.
+            const mappingsForCourse = courseId ? courseInstitutionsMapCached.filter(m => m.course_id === courseId) : [];
+            const courseHasNoMappingConfigured = courseId && mappingsForCourse.length === 0;
+
+            let html = '';
+            options.forEach(opt => {
+                if (opt.value === "") { html += opt.outerHTML; return; }
+                let isFull = false;
+                let isUnconfigured = false;
+                let label = opt.value;
+
+                if (courseId) {
+                    const allocationConfig = courseInstitutionsMapCached.find(m => m.course_id === courseId && m.institutions?.name === opt.value);
+
+                    if (allocationConfig) {
+                        // 0 means UNLIMITED for this institution specifically
+                        // — not zero chairs / closed.
+                        if (allocationConfig.max_slots !== 0) {
+                            const countFilled = opt.value === OTHER_CATCHALL_NAME
+                                ? registrationLogsCached.filter(r => r.course_id === courseId && r.institution_name_snapshot && r.institution_name_snapshot.startsWith(OTHER_CATCHALL_NAME)).length
+                                : registrationLogsCached.filter(r => r.course_id === courseId && r.institution_name_snapshot === opt.value).length;
+                            const chairsLeft = Math.max(0, allocationConfig.max_slots - countFilled);
+                            label = `${opt.value} (${chairsLeft} chairs remaining)`;
+                            if (chairsLeft <= 0) isFull = true;
+                        }
+                    } else if (course && (course.unlimited_seats || courseHasNoMappingConfigured)) {
+                        // No allocation row at all for this institution on
+                        // this course, but the course is either
+                        // unlimited-seats or has no institution restriction
+                        // configured at all ("allow everyone") — treated as
+                        // open, same as an explicit 0. Also covers any
+                        // institution added to the global list after this
+                        // course was created.
+                    } else {
+                        // A restriction WAS configured for this course and
+                        // this institution wasn't included in it — must not
+                        // appear as an option at all.
+                        isUnconfigured = true;
+                    }
+                }
+
+                if (isUnconfigured) return;
+
+                const selectedAttr = (opt.value === currentSelected) ? ' selected' : '';
+                if (isFull) {
+                    html += `<option value="${opt.value}" disabled style="color:#cbd5e1;"${selectedAttr}>${opt.value} (FULL)</option>`;
+                } else {
+                    html += `<option value="${opt.value}"${selectedAttr}>${label}</option>`;
+                }
+            });
+            otherDropdown.innerHTML = html;
+        }
+
+        function updateTargetingSelectOptionsForCourse(courseId) {
+            const course = coursesCached.find(c => c.id === courseId);
+            TARGETING_FIELDS.forEach(field => {
+                const select = document.getElementById('reg_' + field.key);
+                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
+                if (!select) return;
+                const currentValue = select.value;
+
+                let savedArr = [];
+                if (course) {
+                    try {
+                        const raw = course[field.key];
+                        savedArr = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim() !== '' ? JSON.parse(raw) : []);
+                    } catch (e) {
+                        savedArr = [];
+                    }
+                }
+
+                // An empty array means the admin turned off "Show to registrants"
+                // for this field on this course — hide it entirely and stop
+                // requiring it, rather than just filtering its options.
+                // Recorded as a data attribute rather than toggled directly
+                // here: applyTargetingFieldPageVisibility (called for every
+                // page reveal, not just page 1) is what actually decides
+                // hidden-element, combining this "hidden for the course at
+                // all" flag with "is this the page it's configured for".
+                const isHiddenForThisCourse = course && Array.isArray(savedArr) && savedArr.length === 0;
+                if (wrapper) wrapper.dataset.hiddenForCourse = (isHiddenForThisCourse || !course) ? 'true' : 'false';
+                select.required = !isHiddenForThisCourse;
+
+                let allowed = field.options;
+                if (course && !isHiddenForThisCourse && !savedArr.includes('All')) {
+                    allowed = field.options.filter(o => savedArr.includes(o));
+                }
+
+                let optionsHtml = '<option value="">-- Choose --</option>';
+                optionsHtml += allowed.map(o => `<option value="${o}">${o}</option>`).join('');
+                select.innerHTML = optionsHtml;
+                select.value = allowed.includes(currentValue) ? currentValue : '';
+            });
+        }
+
+        // ====================================================================
+        // Custom Questions (optional) — rendered per-course, one input group
+        // per question. All 8 admin-defined types render here; answers are
+        // collected at submit time and saved after the registration itself.
+        // ====================================================================
+        let customQuestionsCache = []; // the currently selected course's questions
+
+        async function renderCustomQuestionsForRegistration(courseId) {
+            const box = document.getElementById('customQuestionsContainer');
+            if (!courseId) { box.innerHTML = ''; customQuestionsCache = []; return; }
+
+            const { data, error } = await client
+                .from('course_questions')
+                .select('*')
+                .eq('course_id', courseId)
+                .order('display_order', { ascending: true });
+
+            if (error) {
+                // Surfaced loudly rather than silently showing nothing —
+                // a real query failure here (bad RLS policy, a missing
+                // column on this database, etc.) previously looked
+                // identical to "this course just has no custom
+                // questions", making it impossible to tell the two apart.
+                console.error('Could not load custom questions for course', courseId, error);
+                box.innerHTML = '';
+                customQuestionsCache = [];
+                return;
+            }
+            if (!data || data.length === 0) {
+                box.innerHTML = '';
+                customQuestionsCache = [];
+                return;
+            }
+            customQuestionsCache = data;
+
+            box.innerHTML = `
+                <div class="cq-section-heading">
+                    Additional Questions
+                </div>
+            ` + data.map((q, index) => {
+                const options = Array.isArray(q.options) ? q.options : [];
+                const gridRows = Array.isArray(q.grid_rows) ? q.grid_rows : [];
+                const gridCols = Array.isArray(q.grid_columns) ? q.grid_columns : [];
+                let fieldHtml = '';
+
+                if (q.question_type === 'text') {
+                    fieldHtml = `<input type="text" class="cq-answer-input" data-qid="${q.id}">`;
+                } else if (q.question_type === 'date') {
+                    fieldHtml = `<input type="date" class="cq-answer-input" data-qid="${q.id}">`;
+                } else if (q.question_type === 'time') {
+                    fieldHtml = `<input type="time" class="cq-answer-input" data-qid="${q.id}">`;
+                } else if (q.question_type === 'list') {
+                    fieldHtml = `<select class="cq-answer-input" data-qid="${q.id}">
+                        <option value="">-- Select --</option>
+                        ${options.map(o => `<option value="${o}">${o}</option>`).join('')}
+                    </select>`;
+                } else if (q.question_type === 'multiple_choice') {
+                    fieldHtml = options.map((o, i) => `
+                        <label class="cq-choice-label">
+                            <input type="radio" name="cq_${q.id}" class="cq-answer-radio" data-qid="${q.id}" value="${o}">
+                            ${o}
+                        </label>`).join('');
+                } else if (q.question_type === 'checkbox') {
+                    fieldHtml = options.map((o, i) => `
+                        <label class="cq-choice-label">
+                            <input type="checkbox" class="cq-answer-checkbox" data-qid="${q.id}" value="${o}">
+                            ${o}
+                        </label>`).join('');
+                } else if (q.question_type === 'multiple_choice_grid' || q.question_type === 'checkbox_grid') {
+                    const inputType = q.question_type === 'multiple_choice_grid' ? 'radio' : 'checkbox';
+                    // Wrapped in its own scroll container — a grid question
+                    // with several columns has no other way to stay usable
+                    // on a narrow phone screen; without this the table was
+                    // squeezed down to fit instead of staying readable.
+                    fieldHtml = `
+                        <div class="cq-grid-scroll-wrapper">
+                        <table class="cq-grid-table">
+                            <thead><tr><th></th>${gridCols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+                            <tbody>
+                                ${gridRows.map(row => `
+                                    <tr>
+                                        <td class="cq-grid-row-label">${row}</td>
+                                        ${gridCols.map(col => `
+                                            <td><input type="${inputType}" name="cq_${q.id}_${row}" class="cq-answer-grid" data-qid="${q.id}" data-row="${row}" value="${col}"></td>
+                                        `).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        </div>`;
+                }
+
+                // Text/Date/Time/List answers sit inline with their
+                // question (one row); Multiple Choice, Checkbox, and both
+                // grid types keep the stacked layout — several radio/
+                // checkbox options or a full table read badly crammed
+                // onto a single line the way one plain input doesn't.
+                const isInlineType = ['text', 'date', 'time', 'list'].includes(q.question_type);
+
+                // Wrapped in its own step div, hidden by default — Activity
+                // Content sections can be anchored "before Question N", which
+                // needs each question individually revealable as the
+                // participant steps through the form (see
+                // advanceRegistrationSteps). A course with no content
+                // anchored between its questions reveals all of them at once
+                // the moment the step before them resolves, so this changes
+                // nothing visually for the common case.
+                return `
+                    <div id="cqStepWrapper_${index}" class="hidden-element">
+                        <div class="cq-registration-field${isInlineType ? ' cq-inline-field' : ''}">
+                            <label class="cq-question-text"><span class="cq-question-number">${index + 1}</span>${q.question_text} <span style="color:#dc2626;">*</span></label>
+                            ${fieldHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Reads every answered custom question into the shape
+        // question_responses.response_value expects: a plain string for
+        // Text/Date/Time/List/Multiple Choice, an array for Checkbox, and a
+        // { rowLabel: answer } map for the two grid types. Every custom
+        // question is now required (see validateCurrentRegPage /
+        // getMissingCustomQuestionLabels), so by the time this runs every
+        // question should already have an answer — but it still only
+        // collects whatever is actually filled in, same as before.
+        function collectCustomQuestionAnswers() {
+            const answers = [];
+            customQuestionsCache.forEach(q => {
+                if (q.question_type === 'text' || q.question_type === 'date' || q.question_type === 'time' || q.question_type === 'list') {
+                    const input = document.querySelector(`.cq-answer-input[data-qid="${q.id}"]`);
+                    if (input && input.value) answers.push({ question_id: q.id, response_value: input.value });
+                } else if (q.question_type === 'multiple_choice') {
+                    const checked = document.querySelector(`.cq-answer-radio[data-qid="${q.id}"]:checked`);
+                    if (checked) answers.push({ question_id: q.id, response_value: checked.value });
+                } else if (q.question_type === 'checkbox') {
+                    const checked = Array.from(document.querySelectorAll(`.cq-answer-checkbox[data-qid="${q.id}"]:checked`)).map(el => el.value);
+                    if (checked.length > 0) answers.push({ question_id: q.id, response_value: checked });
+                } else if (q.question_type === 'multiple_choice_grid' || q.question_type === 'checkbox_grid') {
+                    const rowMap = {};
+                    document.querySelectorAll(`.cq-answer-grid[data-qid="${q.id}"]:checked`).forEach(el => {
+                        const row = el.dataset.row;
+                        if (q.question_type === 'checkbox_grid') {
+                            if (!rowMap[row]) rowMap[row] = [];
+                            rowMap[row].push(el.value);
+                        } else {
+                            rowMap[row] = el.value;
+                        }
+                    });
+                    if (Object.keys(rowMap).length > 0) answers.push({ question_id: q.id, response_value: rowMap });
+                }
+            });
+            return answers;
+        }
+
+        // Every Custom Question is required — this is the one shared check
+        // both validateCurrentRegPage (per-page, on Next) and handleSubmit
+        // (a final backstop covering every page, same as the file-upload
+        // and first-log-entry checks there) call into, so the rule only
+        // has to be defined once. onlyVisible=true scopes it to whatever
+        // question steps are actually revealed right now (used per-page);
+        // handleSubmit calls it with onlyVisible=false since by then every
+        // page should already have been walked.
+        function getMissingCustomQuestionLabels(onlyVisible) {
+            const missing = [];
+            customQuestionsCache.forEach((q, idx) => {
+                if (onlyVisible) {
+                    const wrapper = document.getElementById('cqStepWrapper_' + idx);
+                    if (!wrapper || wrapper.classList.contains('hidden-element')) return;
+                }
+                const label = `Question ${idx + 1}`;
+                if (q.question_type === 'text' || q.question_type === 'date' || q.question_type === 'time' || q.question_type === 'list') {
+                    const input = document.querySelector(`.cq-answer-input[data-qid="${q.id}"]`);
+                    if (!input || !input.value) missing.push(label);
+                } else if (q.question_type === 'multiple_choice') {
+                    const checked = document.querySelector(`.cq-answer-radio[data-qid="${q.id}"]:checked`);
+                    if (!checked) missing.push(label);
+                } else if (q.question_type === 'checkbox') {
+                    const checked = document.querySelectorAll(`.cq-answer-checkbox[data-qid="${q.id}"]:checked`);
+                    if (checked.length === 0) missing.push(label);
+                } else if (q.question_type === 'multiple_choice_grid' || q.question_type === 'checkbox_grid') {
+                    const rowMap = {};
+                    document.querySelectorAll(`.cq-answer-grid[data-qid="${q.id}"]:checked`).forEach(el => { rowMap[el.dataset.row] = true; });
+                    const totalRows = Array.isArray(q.grid_rows) ? q.grid_rows.length : 0;
+                    if (totalRows === 0 || Object.keys(rowMap).length < totalRows) missing.push(label);
+                }
+            });
+            return missing;
+        }
+
+        async function handleCourseSelectionChange() {
+            const courseId = Number(document.getElementById('courseSelect').value);
+            const container = document.getElementById('dynamicUploadsContainer');
+            const selectedCourse = coursesCached.find(c => c.id === courseId);
+
+            // A closed activity shows a notice instead of the rest of the
+            // form entirely — registration, custom questions, uploads, none
+            // of it is reachable while closed.
+            const isClosed = !!selectedCourse && selectedCourse.links_closed === true;
+            document.getElementById('courseClosedNotice').classList.toggle('hidden-element', !isClosed);
+            document.getElementById('closeClosedNoticeBtn').classList.toggle('hidden-element', !isClosed);
+            setAlreadyRegisteredNoticeVisible(false);
+            setNotEligibleNotice(null);
+            setExamRequiredNotice(null);
+
+            if (isClosed) {
+                // These three aren't part of REST_OF_FORM_IDS (toggled by
+                // toggleFormVisibility below), so without this they'd keep
+                // showing whatever the PREVIOUSLY selected open course
+                // rendered — stale custom questions, upload boxes, and
+                // first-session fields left sitting on screen underneath
+                // the "closed" notice even though the Register button
+                // itself is correctly hidden.
+                container.innerHTML = '';
+                document.getElementById('customQuestionsContainer').innerHTML = '';
+                customQuestionsCache = [];
+                document.getElementById('firstLogEntryContainer').classList.add('hidden-element');
+                toggleFormVisibility(false);
+                return;
+            }
+
+            if (!courseId) {
+                toggleFormVisibility(false);
+                return;
+            }
+
+            // Already registered for THIS specific activity? Only knowable
+            // now that both the participant (Staff Number step, resolved
+            // BEFORE course selection) and the course are known — stop
+            // here with a clear message instead of opening the rest of the
+            // form. The database's own registrations_one_per_activity
+            // constraint is still the real backstop (see handleSubmit);
+            // this is just the friendly early check.
+            if (matchedParticipant) {
+                const { data: existingReg } = await client
+                    .from('registrations')
+                    .select('id')
+                    .eq('course_id', courseId)
+                    .eq('participant_id', matchedParticipant.id)
+                    .maybeSingle();
+
+                if (existingReg) {
+                    await client.from('registration_events_log').insert({
+                        event_type: 'duplicate_registration_attempt',
+                        participant_id: matchedParticipant.id,
+                        staff_number: matchedParticipant.staff_number,
+                        staff_name: matchedParticipant.staff_name,
+                        course_id: courseId,
+                        course_name: selectedCourse ? selectedCourse.name : null
+                    });
+                    setAlreadyRegisteredNoticeVisible(true);
+                    toggleFormVisibility(false);
+                    return;
+                }
+
+                // Their own saved profile might rule them out of THIS
+                // specific course even though they're not already
+                // registered for it — e.g. a course open to Female
+                // participants only, and this staff number's saved sex is
+                // Male. A brand-new (unmatched) staff number has nothing
+                // saved to conflict with, so this only ever applies here.
+                const blockReason = getEligibilityBlockReason(matchedParticipant, selectedCourse, courseId);
+                if (blockReason) {
+                    setNotEligibleNotice(blockReason);
+                    toggleFormVisibility(false);
+                    return;
+                }
+            }
+
+            // ================================================================
+            // Exam gate — added for the separate Exam feature (see
+            // sql/activity-exams.sql / js/exam-public.js). A course with an
+            // exam assigned to it (activity_exams.course_id) requires that
+            // exam to be completed before the registration form is revealed
+            // — but ONLY when that exam's own `require_before_registration`
+            // flag is on (admin-configurable in Create/Edit Exam, default
+            // OFF). A course with no activity_exams row is completely
+            // unaffected — examForCourse stays null and every branch below
+            // is skipped, so nothing here changes existing behavior for any
+            // other course; and a course whose exam has the flag off is
+            // treated exactly the same way (registration proceeds normally,
+            // exam untouched) as if it had no exam at all.
+            // ================================================================
+            const staffNumberForExamCheck = matchedParticipant ? matchedParticipant.staff_number : enteredStaffNumberRaw;
+            if (staffNumberForExamCheck) {
+                // A course can have more than one Exam attached (e.g. a
+                // Pre-test and a Post-test copied onto the same Activity) —
+                // .maybeSingle() errors out when more than one row matches,
+                // and that error used to go unchecked, so the gate silently
+                // skipped itself entirely for any course with 2+ exams. This
+                // fetches all of them and gates on whichever one actually
+                // has the flag on (there should normally be at most one, but
+                // this stays correct even if more than one is ever turned on).
+                const { data: examsForCourse } = await client
+                    .from('activity_exams')
+                    .select('id, public_slug, require_before_registration')
+                    .eq('course_id', courseId);
+                const examForCourse = (examsForCourse || []).find(e => e.require_before_registration) || null;
+
+                if (examForCourse && examForCourse.require_before_registration) {
+                    const { data: examAttempt } = await client
+                        .from('activity_exam_attempts')
+                        .select('id, status, expires_at')
+                        .eq('exam_id', examForCourse.id)
+                        .ilike('staff_number', staffNumberForExamCheck)
+                        .maybeSingle();
+
+                    // No separate `timer_enabled` check is needed here: for a
+                    // no-timer exam, js/exam-public.js stores `expires_at` as
+                    // a far-future timestamp (started_at + ~100 years) when
+                    // it creates the attempt, so this comparison is simply
+                    // never true for that attempt — relying on the stored
+                    // deadline is simpler than re-fetching the exam's own
+                    // timer_enabled flag here just to duplicate the same
+                    // conclusion.
+                    const isExpiredInProgress = examAttempt && examAttempt.status === 'in_progress' &&
+                        new Date(examAttempt.expires_at).getTime() < Date.now();
+
+                    if (examAttempt && examAttempt.status === 'submitted') {
+                        // Already completed — reveal the registration form
+                        // exactly as today. Their score is never shown or
+                        // referenced anywhere in this flow.
+                    } else if (isExpiredInProgress) {
+                        // Best-effort auto-submission right here on gate-check
+                        // — this app has no autosave-while-typing, so there is
+                        // nothing saved from whatever browser session had the
+                        // exam open; this submits it as an empty attempt
+                        // purely to flip it to 'submitted' (same choice
+                        // js/exam-public.js's startSolveMode documents for its
+                        // own equivalent resume-when-expired path). Once
+                        // submitted, registration proceeds normally.
+                        await autoSubmitExpiredExamAttempt(examForCourse.id, examAttempt.id);
+                    } else {
+                        // No attempt yet, or a still-running in_progress one —
+                        // either way, registration stays blocked until the
+                        // exam is completed.
+                        const examLink = new URL('exam.html', window.location.href);
+                        examLink.searchParams.set('slug', examForCourse.public_slug);
+                        examLink.searchParams.set('staff', staffNumberForExamCheck);
+                        examLink.searchParams.set('mode', 'solve');
+                        setExamRequiredNotice(examLink.toString());
+                        toggleFormVisibility(false);
+                        return;
+                    }
+                }
+            }
+
+            updateDesignationOptionsForCourse(courseId);
+            updateGenderOptionsForCourse(courseId);
+            updateInstitutionTypeOptionsForCourse(courseId);
+            renderInstitutionFields();
+            // Awaited — beginRegistrationPaging needs customQuestionsCache
+            // already populated to know each question's page number.
+            await renderCustomQuestionsForRegistration(courseId);
+            await loadPageContentForCourse(courseId);
+
+            applyCourseTheme(selectedCourse ? selectedCourse.theme_color : null);
+            document.getElementById('firstLogEntryContainer').classList.toggle('hidden-element', !selectedCourse || selectedCourse.attendance_required !== false);
+            const firstLogDeptSelect = document.getElementById('firstLogDept');
+            firstLogDeptSelect.innerHTML = '<option value="">-- Choose Organized By --</option>' +
+                departmentsList.map(d => `<option value="${d}">${d}</option>`).join('');
+            // The agreement box is shown for every course now (and its
+            // checkbox is required at submit); only the wording differs. An
+            // attendance-required course gets the certificate-name
+            // confirmation plus the "notify the Organizing Committee if I
+            // can't attend" undertaking — certificates for a course that
+            // doesn't require attendance are gated on attendance anyway, so
+            // that one only gets the undertaking.
+            const isNonAttendanceCourse = !!selectedCourse && selectedCourse.attendance_required === false;
+            document.getElementById('agreementTextAttendance').classList.toggle('hidden-element', isNonAttendanceCourse);
+            document.getElementById('agreementTextNoAttendance').classList.toggle('hidden-element', !isNonAttendanceCourse);
+            document.getElementById('certNameAgreement').checked = false;
+
+            // Load the matched participant's saved info now that the
+            // course-specific institution/designation dropdowns above are
+            // ready to accept it — a brand-new (unmatched) staff number
+            // just gets its typed value carried into the field instead.
+            // Either way, the Staff Number field itself is locked here — it
+            // was already entered once at the Staff Number step; a typo
+            // gets fixed by going back via "Not you? Change staff number",
+            // not by editing it again down here.
+            //
+            // The REST of the saved profile (name, phone, institution, ...)
+            // only gets prefilled when it's still current for this year
+            // (isProfileCurrentForThisYear) — once a new year starts, the
+            // point is to make them actually type their info again (it may
+            // well have changed), not hand back last year's answers to
+            // rubber-stamp. The fields are simply left blank for the
+            // participant to fill in from scratch, exactly like a brand-new
+            // staff number, until they save again and re-lock for the year.
+            if (matchedParticipant) {
+                if (isProfileCurrentForThisYear(matchedParticipant)) {
+                    prefillFromParticipant(matchedParticipant);
+                } else {
+                    clearProfileFieldsForYearRefresh();
+                }
+                document.getElementById('staffNumber').value = matchedParticipant.staff_number;
+            } else {
+                document.getElementById('staffNumber').value = enteredStaffNumberRaw;
+            }
+            document.getElementById('staffNumber').readOnly = true;
+
+            let labels = [];
+            let examples = [];
+            try {
+                labels = selectedCourse && Array.isArray(selectedCourse.file_labels) ? selectedCourse.file_labels : JSON.parse(selectedCourse.file_labels || "[]");
+                examples = selectedCourse && Array.isArray(selectedCourse.file_examples) ? selectedCourse.file_examples : JSON.parse(selectedCourse.file_examples || "[]");
+            } catch(e) {
+                labels = [];
+                examples = [];
+            }
+
+            labels = labels.filter(l => l && l.trim() !== "");
+
+            if (labels.length === 0) {
+                container.innerHTML = '<div class="no-uploads-msg">✅ No document attachments are required for this course session.</div>';
+            } else {
+                container.innerHTML = labels.map((descText, idx) => {
+                    const exampleUrl = examples[idx] || '';
+
+                    const exampleImageHtml = exampleUrl ? `
+                        <div class="form-blueprint-card">
+                            <a href="${exampleUrl}" target="_blank">
+                                <img src="${exampleUrl}" alt="Template Reference Guide" onerror="this.parentElement.parentElement.style.display='none'">
+                            </a>
+                            <div>
+                                <b>Example Document Blueprint:</b>
+                                Please ensure your copy matches parameters shown here.
+                            </div>
+                        </div>` : '';
+
+                    return `
+                        <div class="single-upload-box">
+                            <label>Upload Document #${idx + 1}: <span>${descText} *</span></label>
+                            ${exampleImageHtml}
+                            <input type="file" class="file-input custom-file-target" data-label="${descText}" accept="image/*, .pdf" required>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Runs dead last, once every field above (prefill, uploads) has
+            // been populated — reveals page 1 (identity fields, Required
+            // Documents, page-1 questions) right away, and sets up the
+            // Previous/Next footer if this course's questions span more
+            // than one page.
+            beginRegistrationPaging(courseId);
+
+            // Locking happens after beginRegistrationPaging (not right after
+            // prefillFromParticipant above) because revealing page 1 is what
+            // actually builds the targeting selects' (Job Level, Nationality,
+            // ...) course-filtered option lists — locking any earlier would
+            // just be undone the moment those options get rebuilt. A
+            // brand-new (unmatched) staff number stays fully editable, same
+            // as always; a returning one only locks if their profile is
+            // still current for THIS year (see isProfileCurrentForThisYear).
+            if (matchedParticipant && isProfileCurrentForThisYear(matchedParticipant)) {
+                lockProfileFieldsForReturningParticipant(matchedParticipant);
+            } else {
+                unlockProfileFields();
+                if (matchedParticipant) showProfileRefreshNotice();
+            }
+        }
+
+        function updateSelectableCoursesOptions() {
+            const userSex = document.getElementById('sexSelect').value;
+            let userDesignation = document.getElementById('designationSelect').value;
+            
+            if (userDesignation === 'Other') {
+                userDesignation = document.getElementById('otherDesignationInput').value.trim();
+            }
+            
+            const courseDropdown = document.getElementById('courseSelect');
+            const savedSelectedValue = courseDropdown.value;
+
+            let filtered = coursesCached.filter(c => hasOpenSeats(c) && isRegistrationOpen(c));
+
+            // A locked (direct-link) course is never filtered away by the
+            // sex/designation boxes: the activity comes only from the link,
+            // and eligibility is enforced by the notices/field limits, so
+            // there is no visible list for it to "disappear" from.
+            const linkLocked = courseDropdown.disabled;
+
+            if (userSex && !linkLocked) {
+                filtered = filtered.filter(c => !c.allowed_sex || c.allowed_sex === 'Both' || c.allowed_sex === userSex);
+            }
+
+            if (userDesignation && !linkLocked) {
+                filtered = filtered.filter(c => {
+                    if (!c.allowed_designations) return true;
+                    try {
+                        const targetList = Array.isArray(c.allowed_designations) ? c.allowed_designations : JSON.parse(c.allowed_designations);
+                        if (targetList.length === 0 || targetList.includes('All')) return true;
+                        return targetList.includes(userDesignation);
+                    } catch (e) {
+                        return true;
+                    }
+                });
+            }
+
+            let optionsHtml = '<option value="">-- Choose Course --</option>';
+            optionsHtml += filtered.map(c => `<option value="${c.id}">${c.name} (🗓️ ${c.course_date}) (${seatsLabel(c)})</option>`).join('');
+            
+            courseDropdown.innerHTML = optionsHtml;
+            
+            if (filtered.some(c => c.id === Number(savedSelectedValue))) {
+                courseDropdown.value = savedSelectedValue;
+            } else {
+                courseDropdown.value = "";
+                handleCourseSelectionChange();
+            }
+        }
+
+        // Shows/hides the "use your activity's link" message in place of the
+        // staff-number step + form. message = null restores the form.
+        function showActivityLinkProblem(message) {
+            const notice = document.getElementById('noActivityNotice');
+            document.getElementById('noActivityNoticeText').textContent = message || '';
+            notice.classList.toggle('hidden-element', !message);
+            document.getElementById('registerFormCard').classList.toggle('hidden-element', !!message);
+            if (message) document.getElementById('featuredSection').classList.add('hidden-element');
+        }
+
+        // ---- Activity link -------------------------------------------------
+        // The registration link carries a private random token (?c=...), not the
+        // plain activity number, so nobody can open another activity's form by
+        // editing the number. Only the ONE linked activity is ever loaded here.
+        // Old numeric links (?course=ID) are refused once the token column exists
+        // (run sql/registration-link-security.sql); set this to true ONLY to
+        // temporarily keep already-shared numeric links alive.
+        const ALLOW_NUMERIC_COURSE_LINKS = false;
+        let linkProblem = null;
+
+        function readActivityLink() {
+            const q = new URLSearchParams(window.location.search);
+            // Chat apps often glue punctuation onto a pasted link ("...abc." / "...abc)") - ignore trailing junk.
+            const token = (q.get('c') || '').trim().replace(/[^A-Za-z0-9_-]+$/, '');
+            const rawId = (q.get('course') || '').trim();
+            return { token, rawId, legacyId: /^\d+$/.test(rawId) ? Number(rawId) : null };
+        }
+
+        // Loads ONLY the linked activity. Returns { courses:[row]|[], error, problem }.
+        async function fetchLinkedCourse() {
+            const link = readActivityLink();
+            const noLink = "Please open the registration link of your activity to register. This page can't be used without it.";
+            const invalid = "This registration link isn't valid, or the activity no longer exists. Please use the link you received or contact the Professional Development Department.";
+            if (link.token) {
+                if (!/^[A-Za-z0-9_-]{8,64}$/.test(link.token)) return { courses: [], problem: invalid };
+                const { data, error } = await client.from('courses').select('*').eq('registration_token', link.token).limit(1);
+                if (error) return { courses: [], error };
+                // Belt and braces: keep only the row whose token really equals the link's.
+                const hit = (data || []).filter(c => c.registration_token === link.token);
+                return hit.length ? { courses: hit.slice(0, 1) } : { courses: [], problem: invalid };
+            }
+            if (link.legacyId) {
+                const { data, error } = await client.from('courses').select('*').eq('id', link.legacyId).limit(1);
+                if (error) return { courses: [], error };
+                const rows = (data || []).filter(c => Number(c.id) === link.legacyId);
+                if (!rows.length) return { courses: [], problem: invalid };
+                data.splice(0, data.length, rows[0]);
+                // Token column missing (SQL not run yet) -> keep the old link working.
+                // Token column present -> a numeric link is no longer accepted.
+                if (Object.prototype.hasOwnProperty.call(data[0], 'registration_token') && !ALLOW_NUMERIC_COURSE_LINKS) {
+                    return { courses: [], problem: 'This registration link is no longer valid. Please ask the Professional Development Department for the new link of your activity.' };
+                }
+                return { courses: data };
+            }
+            return { courses: [], problem: link.rawId ? invalid : noLink };
+        }
+
+        // Decides whether this page can register anyone, using the ONE loaded
+        // activity. Returns its id, otherwise null after showing the matching message.
+        function evaluateActivityLink() {
+            const course = coursesCached[0] || null;
+            let problem = linkProblem;
+            if (!problem && !course) problem = "This registration link isn't valid, or the activity no longer exists. Please use the link you received or contact the Professional Development Department.";
+            if (!problem && isRegistrationOpen(course) && !hasOpenSeats(course)) {
+                problem = 'All seats for this activity are taken. Please contact the Professional Development Department.';
+            }
+            showActivityLinkProblem(problem);
+            return problem ? null : course.id;
+        }
+
+        async function loadRegistrationFormConfig() {
+            const { courses, error: courseErr, problem: linkProb } = await fetchLinkedCourse();
+            linkProblem = linkProb || null;
+            if (courseErr) {
+                console.error("Database fetch error:", courseErr);
+                showActivityLinkProblem('Could not load the activity right now. Please reload the page in a moment.');
+                revealHero();
+                return;
+            }
+            coursesCached = courses;
+
+            // The activity comes ONLY from the registration link. No valid
+            // link -> a clear message instead of the form, and no course is
+            // promoted in the Featured card.
+            const directCourseId = evaluateActivityLink();
+            const cardsToShow = directCourseId ? courses.filter(c => c.id === directCourseId) : [];
+
+            // Everything renderFeaturedWorkshop needs (including the theme
+            // color) comes from `courses` alone, so reveal right after this —
+            // no need to wait on the two heavier queries below first.
+            renderFeaturedWorkshop(cardsToShow);
+            revealHero();
+
+            // Same master list Create Course seeds into the institutions
+            // table — replicated here (not just relying on Create Course
+            // having been opened first) so this page shows the full
+            // Ibra/Other list even on a completely fresh database.
+            const masterInstitutionsAndDepartments = [
+                "Al Mudhaibi Health Center", "Wadi Bani Khalid Hospital", "Sinaw Health Hospital",
+                "Ibra Health Center", "Sinaw Health Center", "Al Yahmadi Health Center",
+                "Al Mudhaibi Health Center (New)", "Samad Al Shaan Hospital", "Bidiyah Hospital",
+                "Al Qabil Health Center", "Wadi Dama Wa At Taiyyin Hospital", "Al Dhahir Health Center",
+                "Al Jaza Health Center", "Sumayyan Health Center", "Al Jardaa Health Center",
+                "Al Aflaj Health Center", "Miss Health Centre", "Dma Health Centre", "Wadi Naam Health Center", "Other (Please Specify)",
+                "Ibra - Emergency Department Doctor", "Ibra - Emergency Department Nurse", "Ibra - Internal Medicine Department",
+                "Ibra - General Surgery Department", "Ibra - Paediatrician", "Ibra - Obstetrics and Gynecology Department",
+                "Ibra - Orthopedics Department", "Ibra - Ophthalmology Department", "Ibra - ENT Department",
+                "Ibra - Anesthesia Department", "Ibra - Dialysis Unit Nurse", "Ibra - Radiology Department",
+                "Ibra - Laboratory Department", "Ibra - Physiotherapy Department", "Ibra - Clinical Nutrition Department",
+                "Ibra - Pharmacy Department", "Ibra - Male Medical and Surgical Ward", "Ibra - Female Medical and Surgical Ward",
+                "Ibra - Pediatrics Ward", "Ibra - Obstetrics and Gynecology Ward", "Ibra - Adult Intensive Care Unit (ICU)",
+                "Ibra - Special Care Baby Unit (SCBU)", "Ibra - OPD", "Ibra - Nephrologist", "Ibra - DS Nurse",
+                "Ibra - OT Nurse", "Ibra - RT"
+            ];
+            const { data: existingInstitutions } = await client.from('institutions').select('name');
+            // Only seed a genuinely EMPTY table (a fresh deployment) —
+            // previously this checked each individual master-list name and
+            // re-inserted whichever were missing, on EVERY registration
+            // page load — meaning an admin deleting one of these
+            // institutions (e.g. from the Ibra Department admin page) had
+            // it silently recreated the next time anyone simply opened a
+            // registration link, which happens far more often than admin
+            // visits. Deleting an institution should be permanent.
+            if (!existingInstitutions || existingInstitutions.length === 0) {
+                await client.from('institutions').insert(masterInstitutionsAndDepartments.map(name => ({ name })));
+            }
+
+            const [{ data: maps, error: mapErr }, { data: registers, error: regErr }, { data: institutionsData, error: instErr }] = await Promise.all([
+                client.from('course_institutions').select('*, institutions(name)'),
+                // Reads the safe public view (course_id, institution_name_snapshot,
+                // designation_category_snapshot only) — the base registrations
+                // table itself is admin-only under RLS, since it holds phone
+                // numbers and names.
+                client.from('public_registration_counts').select('course_id, institution_name_snapshot, designation_category_snapshot'),
+                // The two dropdowns below used to be a hardcoded JS array and a
+                // static list of <option> tags respectively — meaning an
+                // institution added anywhere in the admin (hub or Create
+                // Course) could NEVER show up here no matter what, since
+                // neither dropdown ever queried this table at all. Fetching
+                // it directly here is what actually connects them.
+                client.from('institutions').select('id, name')
+            ]);
+            if (mapErr) return console.error("Allocation mapping database tracking fail:", mapErr);
+            courseInstitutionsMapCached = maps || [];
+            // Previously this aborted the ENTIRE function early on any
+            // fetch error here (a `return`) — meaning everything after
+            // this point, including populating departmentsList and
+            // building the institution/department dropdowns, silently
+            // never ran at all. That's what actually caused "every
+            // institution locked": a 404 on this one table took the
+            // whole page's data setup down with it. Now matches the
+            // instErr handling right below — log and continue with
+            // whatever we have.
+            if (regErr) console.error("Logs fetch error:", regErr);
+            registrationLogsCached = registers || [];
+            if (instErr) console.error("Institutions fetch error:", instErr);
+            const allInstitutionNames = (institutionsData || []).map(i => i.name);
+            // Lets registration proceed against the actual institution row
+            // even when NO course_institutions allocation row exists for it
+            // (an unrestricted/unlimited course — see the "not authorized"
+            // fix above) — allocationConfig.institution_id isn't available
+            // in that case, so this is the fallback source of truth for the
+            // real institution id to save against the registration/participant.
+            institutionsByNameCached = new Map((institutionsData || []).map(i => [i.name, i.id]));
+            departmentsList.length = 0;
+            departmentsList.push(...allInstitutionNames
+                .filter(n => n.startsWith('Ibra - '))
+                .map(n => n.slice('Ibra - '.length))
+                .sort());
+            // OTHER_CATCHALL_NAME is already one of the seeded rows above, so
+            // it's excluded here and appended once explicitly instead of
+            // showing up twice.
+            populateOtherInstitutionOptions(allInstitutionNames
+                .filter(n => !n.startsWith('Ibra - ') && n !== OTHER_CATCHALL_NAME)
+                .sort());
+
+            updateSelectableCoursesOptions();
+        }
+
+        // Rebuilds the "Other" institution dropdown's actual <option> list from
+        // the institutions table, keeping the free-text catch-all option that
+        // isn't a real row in that table.
+        function populateOtherInstitutionOptions(names) {
+            const dropdown = document.getElementById('otherInstitutionInput');
+            const currentSelected = dropdown.value;
+            let html = '<option value="">-- Choose Corporate / Academic Entity --</option>';
+            names.forEach(name => {
+                html += `<option value="${name}">${name}</option>`;
+            });
+            html += `<option value="${OTHER_CATCHALL_NAME}">${OTHER_CATCHALL_NAME}</option>`;
+            dropdown.innerHTML = html;
+            if (currentSelected) dropdown.value = currentSelected;
+        }
+
+        // Picks the soonest upcoming open course as the Featured Workshop —
+        // real data only, never invented. Falls back to the first course with
+        // open seats if none are strictly in the future (e.g. all dates already
+        // passed but still listed), and hides the section entirely if there's
+        // nothing to feature.
+        function renderFeaturedWorkshop(courses) {
+            const section = document.getElementById('featuredSection');
+            const openCourses = courses.filter(c => hasOpenSeats(c) && isRegistrationOpen(c));
+
+            if (openCourses.length === 0) {
+                // A direct link (?course=X) to a specific course that's now
+                // closed still deserves a clear message, not just a vanished
+                // section — but a generic listing with nothing open just hides.
+                const closedDirectCourse = courses.find(c => !isRegistrationOpen(c));
+                if (courses.length === 1 && closedDirectCourse) {
+                    applyCourseTheme(closedDirectCourse.theme_color);
+                    const visual = section.querySelector('.featured-visual');
+                    if (closedDirectCourse.image_url) {
+                        visual.innerHTML = `<img src="${closedDirectCourse.image_url}" alt="${(closedDirectCourse.name || 'Workshop').replace(/"/g, '&quot;')}" class="featured-visual-img" data-lightbox-img="${closedDirectCourse.image_url}">`;
+                    } else {
+                        visual.innerHTML = `<svg viewBox="0 0 64 64" width="40" height="40" fill="none">
+                          <circle cx="32" cy="32" r="22" stroke="white" stroke-width="4"/>
+                          <path d="M32 20V33L40 38" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`;
+                    }
+                    document.getElementById('featuredTitle').textContent = closedDirectCourse.name;
+                    const closedDescEl = document.getElementById('featuredDescription');
+                    closedDescEl.textContent = registrationStatusMessage(closedDirectCourse);
+                    closedDescEl.classList.remove('has-comment');
+                    document.getElementById('featuredMeta').innerHTML = `<span>📅 ${closedDirectCourse.course_date}</span>`;
+                    section.classList.remove('hidden-element');
+                    // Nothing to register for on a closed/not-yet-open course
+                    // linked directly — hide the whole "Register for a
+                    // Workshop" section (heading + form) rather than show a
+                    // form for a course that can't actually be joined.
+                    document.getElementById('register').classList.add('hidden-element');
+                    return;
+                }
+                section.classList.add('hidden-element');
+                return;
+            }
+
+            // Restore the registration section for the normal case (open
+            // course) — it may have been hidden by the closed-course branch
+            // above on an earlier render.
+            document.getElementById('register').classList.remove('hidden-element');
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const upcoming = openCourses
+                .filter(c => c.course_date && !isNaN(new Date(c.course_date)))
+                .sort((a, b) => new Date(a.course_date) - new Date(b.course_date))
+                .find(c => new Date(c.course_date) >= today);
+            const featured = upcoming || openCourses[0];
+
+            applyCourseTheme(featured.theme_color);
+
+            const visual = section.querySelector('.featured-visual');
+            if (featured.image_url) {
+                visual.innerHTML = `<img src="${featured.image_url}" alt="${(featured.name || 'Workshop').replace(/"/g, '&quot;')}" class="featured-visual-img" data-lightbox-img="${featured.image_url}">`;
+            } else {
+                visual.innerHTML = `<svg viewBox="0 0 64 64" width="40" height="40" fill="none">
+                  <circle cx="32" cy="32" r="22" stroke="white" stroke-width="4"/>
+                  <path d="M32 20V33L40 38" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>`;
+            }
+
+            document.getElementById('featuredTitle').textContent = featured.name;
+            const description = (featured.description || '').trim();
+            const descEl = document.getElementById('featuredDescription');
+            descEl.innerHTML = description
+                ? `<span class="comment-pin-icon">📌</span> <span class="comment-shimmer-text">${description}</span>`
+                : `Open registration — ${featured.unlimited_seats ? 'unlimited chairs' : featured.seats + ' chair' + (featured.seats === 1 ? '' : 's')} available.`;
+            descEl.classList.toggle('has-comment', Boolean(description));
+
+            const metaParts = [`<span>📅 ${featured.course_date}</span>`];
+            if ((featured.instructor_name || '').trim()) metaParts.push(`<span>🎓 ${featured.instructor_name}</span>`);
+            metaParts.push(`<span>🪑 ${featured.unlimited_seats ? 'Unlimited' : featured.seats} available</span>`);
+            document.getElementById('featuredMeta').innerHTML = metaParts.join('');
+
+            section.classList.remove('hidden-element');
+        }
+
+        // Shared by the Featured Workshop CTA and each card's "View ->" link:
+        // selects that course in the registration form below and scrolls to it.
+        window.selectCourseAndScroll = function (courseId) {
+            const select = document.getElementById('courseSelect');
+            select.value = String(courseId);
+            select.dispatchEvent(new Event('change'));
+            document.getElementById('register').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
+        // A simple centered success message with just a Close button — no
+        // "go to X" choice, since the first log entry (when the participant
+        // filled it in) is already captured as part of this same submission.
+        function showSimpleSuccessCard(message) {
+            const overlay = document.createElement('div');
+            overlay.className = 'form-modal-overlay';
+            overlay.innerHTML = `
+                <div class="form-modal-card" style="text-align:center;">
+                    <div class="form-toast-title" style="font-size:16px;">${message}</div>
+                    <button type="button" class="confirm-btn confirm-ok" id="successCloseBtn" style="width:100%; margin-top:10px;">Close</button>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            overlay.querySelector('#successCloseBtn').addEventListener('click', () => {
+                // Same window.close()-with-fallback pattern used elsewhere
+                // in this app (the closed-activity notice, Activity Log's
+                // own Close button) — browsers don't allow a script to
+                // close a tab it didn't open itself, so this falls back to
+                // a plain "you're done" message instead of just dropping
+                // the visitor back onto a reset registration form.
+                window.close();
+                overlay.remove();
+                document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
+            });
+        }
+
+        // Thin re-entrancy guard around the real submit logic below
+        // (renamed to handleSubmitInner, otherwise untouched). regBtn only
+        // gets disabled well after several awaited checks (closed-course,
+        // duplicate-registration) run — a fast double-click/double-tap
+        // before that point could start two overlapping submissions, both
+        // passing those checks, both uploading files, before the database's
+        // own unique constraint finally rejects the second one. This flag
+        // is set synchronously on the very first click and only ever
+        // cleared in `finally`, so it covers every return path inside
+        // handleSubmitInner (including all its early `return;`s) without
+        // having to touch each one individually.
+        let handleSubmitInFlight = false;
+        async function handleSubmit() {
+            if (handleSubmitInFlight) return;
+            handleSubmitInFlight = true;
+            try {
+                await handleSubmitInner();
+            } finally {
+                handleSubmitInFlight = false;
+            }
+        }
+
+        async function handleSubmitInner() {
+            const regBtn = document.getElementById('regBtn');
+            const courseIdForClosedCheck = Number(document.getElementById('courseSelect').value);
+            const { data: freshCourse } = await client.from('courses').select('links_closed').eq('id', courseIdForClosedCheck).maybeSingle();
+            if (freshCourse && freshCourse.links_closed) {
+                alert('This activity is currently closed for registration.');
+                return;
+            }
+
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const sexValue    = document.getElementById('sexSelect').value;
+            const staffName   = document.getElementById('staffName').value.trim();
+            const staffNumber = document.getElementById('staffNumber').value.trim();
+            
+            const designationCategory = document.getElementById('designationSelect').value;
+            let designation = designationCategory;
+            if (designation === 'Other') {
+                designation = document.getElementById('otherDesignationInput').value.trim();
+            }
+            
+            const specialization = document.getElementById('specializationInput').value.trim();
+            const courseId    = Number(document.getElementById('courseSelect').value);
+
+            // One registration per staff number per activity — checked
+            // here up front for a fast, clear message before any file
+            // uploads happen; the database itself also enforces this via a
+            // unique constraint (see sql/prevent-duplicate-registration.sql),
+            // which is what actually closes the race-condition case of two
+            // near-simultaneous submissions both passing this check.
+            if (staffNumber) {
+                const { data: existingReg } = await client
+                    .from('registrations')
+                    .select('id')
+                    .eq('course_id', courseId)
+                    .ilike('staff_number', staffNumber.trim())
+                    .maybeSingle();
+                if (existingReg) {
+                    alert('This staff number is already registered for this activity.');
+                    return;
+                }
+            }
+
+            const instType    = document.getElementById('institutionTypeSelect').value;
+            
+            const selectedDept = document.getElementById('departmentSelect').value;
+            const otherText    = document.getElementById('otherInstitutionInput').value;
+            const otherFreeText = document.getElementById('otherInstitutionFreeText').value.trim();
+            const fileInputs   = document.querySelectorAll('.custom-file-target');
+
+            const targetingValues = {};
+            for (const field of TARGETING_FIELDS) {
+                const select = document.getElementById('reg_' + field.key);
+                targetingValues[field.key] = select ? select.value : '';
+            }
+
+            // Final Submit-time backstop — names every specific field still
+            // missing in one message, rather than a generic "something's
+            // incomplete". Mirrors validateCurrentRegPage's per-field
+            // labels but checks the WHOLE form regardless of page, since a
+            // field can end up genuinely blank here even after passing
+            // every page's own Next-button check — e.g. a returning
+            // participant's saved Institution/Designation/Gender wasn't
+            // offered by THIS activity (prefillFromParticipant leaves it
+            // open rather than guessing), and they reached Submit without
+            // noticing it still needs a fresh answer.
+            const missingNow = [];
+            if (!staffName) missingNow.push('Full Name');
+            else if (staffName.split(/\s+/).filter(Boolean).length < 2) missingNow.push('Full Name (first and last name)');
+            if (!staffNumber) missingNow.push('Staff Number');
+            if (!phoneNumber) missingNow.push('Phone Number');
+            if (!sexValue) missingNow.push('Gender');
+            if (!designationCategory) missingNow.push('Designation');
+            else if (designationCategory === 'Other' && !designation) missingNow.push('Designation (please specify)');
+            if (!specialization) missingNow.push('Current Post');
+            if (!courseId) missingNow.push('Activity');
+            if (!instType) {
+                missingNow.push('Institution/Department');
+            } else if (instType === 'Ibra') {
+                if (!selectedDept) missingNow.push('Department');
+            } else {
+                if (!otherText) missingNow.push('Institution');
+                else if (otherText === OTHER_CATCHALL_NAME && !otherFreeText) missingNow.push('Institution name');
+            }
+            for (const field of TARGETING_FIELDS) {
+                const wrapper = document.getElementById('regFieldWrapper_' + field.key);
+                // dataset.hiddenForCourse (set by updateTargetingSelectOptionsForCourse)
+                // means the course itself doesn't offer this field at all —
+                // that's the only reason to skip it here. classList's
+                // 'hidden-element' also gets set/cleared per CURRENT PAGE by
+                // applyTargetingFieldPageVisibility, which is irrelevant at
+                // Submit time (always the last page) and must not be used
+                // here, or a field configured for an earlier page would read
+                // as hidden and silently skip this whole-form check.
+                const notOfferedByCourse = wrapper && wrapper.dataset.hiddenForCourse === 'true';
+                if (notOfferedByCourse) continue;
+                if (!targetingValues[field.key]) missingNow.push(field.label);
+            }
+            if (missingNow.length > 0) {
+                alert(`Please complete the following before submitting: ${missingNow.join(', ')}.`);
+                return;
+            }
+
+            if (!document.getElementById('certNameAgreement').checked) {
+                alert('Please tick "I confirm and agree to the above" before submitting.');
+                return;
+            }
+
+            // Not part of the main required-fields check above since it only
+            // applies when this section is actually shown (no-attendance
+            // courses) — hidden entirely for attendance-required ones, where
+            // it isn't relevant at all.
+            const firstLogVisible = !document.getElementById('firstLogEntryContainer').classList.contains('hidden-element');
+            if (firstLogVisible) {
+                const firstLogTitleVal = document.getElementById('firstLogTitle').value.trim();
+                const firstLogDeptVal = document.getElementById('firstLogDept').value;
+                const firstLogDateFromVal = document.getElementById('firstLogDateFrom').value;
+                const firstLogDateToVal = document.getElementById('firstLogDateTo').value;
+                const missingFirstLog = [];
+                if (!firstLogTitleVal) missingFirstLog.push('Title');
+                if (!firstLogDeptVal) missingFirstLog.push('Organized By');
+                if (!firstLogDateFromVal) missingFirstLog.push('Date From');
+                if (!firstLogDateToVal) missingFirstLog.push('Date To');
+                if (missingFirstLog.length > 0) {
+                    alert(`Please complete the following for your first session: ${missingFirstLog.join(', ')}.`);
+                    return;
+                }
+                if (firstLogDateToVal < firstLogDateFromVal) {
+                    alert('The "To" date can\'t be before the "From" date.');
+                    return;
+                }
+            }
+
+            let institutionSnapshotString = '';
+            let allocationLookupName = '';
+            const isOtherCatchAll = (instType === 'Other' && otherText === OTHER_CATCHALL_NAME);
+
+            if (instType === 'Ibra') {
+                if (!selectedDept) { alert("Please select your target department."); return; }
+                institutionSnapshotString = `Ibra - ${selectedDept}`;
+                allocationLookupName = institutionSnapshotString;
+            } else {
+                if (!otherText) { alert("Please select your institution name."); return; }
+                if (isOtherCatchAll) {
+                    if (!otherFreeText) { alert("Please type your institution name."); return; }
+                    institutionSnapshotString = `${OTHER_CATCHALL_NAME}: ${otherFreeText}`;
+                    allocationLookupName = OTHER_CATCHALL_NAME;
+                } else {
+                    institutionSnapshotString = otherText;
+                    allocationLookupName = otherText;
+                }
+            }
+
+            // Final backstop covering every page, same reasoning as the
+            // file-upload check right below — the per-page Next button
+            // already blocks this one page at a time, but a single-page
+            // course with no Next click at all still needs to be caught
+            // here before the registration actually saves.
+            const missingQuestions = getMissingCustomQuestionLabels(false);
+            if (missingQuestions.length > 0) {
+                alert(`Please answer every question — missing: ${missingQuestions.join(', ')}.`);
+                return;
+            }
+
+            const currentCourse = coursesCached.find(c => c.id === courseId);
+            for (let input of fileInputs) {
+                if (!input.files || input.files.length === 0) {
+                    alert(`Registration denied! Missing file target object: "${input.getAttribute('data-label')}"`);
+                    return;
+                }
+            }
+
+            regBtn.disabled = true;
+            regBtn.innerText = "Processing server storage sequence uploads...";
+
+            try {
+                const allocationConfig = courseInstitutionsMapCached.find(m => m.course_id === courseId && m.institutions?.name === allocationLookupName);
+
+                // Mirrors the exact same "open when unconfigured" rule the
+                // dropdowns already apply (filterIbraDepartments /
+                // filterOtherInstitutions): a missing allocation row is only
+                // a real problem when the course actually HAS a
+                // restriction configured and this institution just isn't
+                // part of it. If the course was never restricted to
+                // specific institutions at all (no rows), or the course is
+                // unlimited-seats, there's nothing to be "not authorized"
+                // for — every institution is allowed and uncapped. Without
+                // this, an institution that the dropdown itself offered as
+                // open could still be rejected here.
+                const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
+                const courseHasNoMappingConfigured = mappingsForCourse.length === 0;
+
+                if (!allocationConfig && !courseHasNoMappingConfigured && !(currentCourse && currentCourse.unlimited_seats)) {
+                    throw new Error("This institution/department is not authorized or assigned slots for this specific course framework.");
+                }
+
+                // allocationConfig.institution_id is only available when a
+                // course_institutions row actually exists for this
+                // institution — which, per the fix above, is no longer
+                // guaranteed (an unrestricted/unlimited course can register
+                // an institution with no allocation row at all). Falls back
+                // to looking the institution up directly by name so the
+                // real institution id is still saved either way.
+                const resolvedInstitutionId = allocationConfig ? allocationConfig.institution_id : (institutionsByNameCached.get(allocationLookupName) ?? null);
+
+                if (allocationConfig) {
+                    let realTimeQuery = client.from('public_registration_counts')
+                        .select('id')
+                        .eq('course_id', courseId);
+                    realTimeQuery = isOtherCatchAll
+                        ? realTimeQuery.like('institution_name_snapshot', `${OTHER_CATCHALL_NAME}%`)
+                        : realTimeQuery.eq('institution_name_snapshot', institutionSnapshotString);
+                    const { data: realTimeCheck } = await realTimeQuery;
+
+                    // max_slots = 0 means UNLIMITED for this specific
+                    // institution (same convention used everywhere else in
+                    // the app) — skip this check entirely in that case,
+                    // rather than comparing a count against 0 and always
+                    // failing. This is the actual source of the "cap limit
+                    // of 0 seats" error — this client-side pre-check runs
+                    // BEFORE the database RPC is ever reached, so fixing the
+                    // database function alone had no effect.
+                    if (allocationConfig.max_slots !== 0 && realTimeCheck && realTimeCheck.length >= allocationConfig.max_slots) {
+                        throw new Error(`This department/institution seat room has filled its cap limit of ${allocationConfig.max_slots} seats. Registration locked.`);
+                    }
+                }
+                // No allocationConfig row AND the course is open (unlimited
+                // or unrestricted) — no cap to check against, registration
+                // proceeds uncapped for this institution.
+
+                let designationSeatCaps = {};
+                try {
+                    const raw = currentCourse ? currentCourse.designation_seats : null;
+                    designationSeatCaps = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+                } catch (e) {
+                    designationSeatCaps = {};
+                }
+                const designationCap = designationSeatCaps && designationSeatCaps[designationCategory];
+                if (designationCap) {
+                    const { data: designationRealTimeCheck } = await client.from('public_registration_counts')
+                        .select('id')
+                        .eq('course_id', courseId)
+                        .eq('designation_category_snapshot', designationCategory);
+                    if (designationRealTimeCheck && designationRealTimeCheck.length >= designationCap) {
+                        throw new Error(`The "${designationCategory}" seat allocation has filled its cap limit of ${designationCap} seats. Registration locked.`);
+                    }
+                }
+
+                const uploadedUrls = [];
+                for (let i = 0; i < fileInputs.length; i++) {
+                    const currentFile = fileInputs[i].files[0];
+                    const fileExtension = currentFile.name.split('.').pop();
+                    const cleanLabel = fileInputs[i].getAttribute('data-label').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const uniqueFileName = `${Date.now()}_${cleanLabel}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+                    const { error: uploadError } = await client.storage
+                        .from('registration-files')
+                        .upload(uniqueFileName, currentFile);
+
+                    if (uploadError) throw new Error(`Upload Failed: ` + uploadError.message);
+
+                    const { data: publicUrlData } = client.storage
+                        .from('registration-files')
+                        .getPublicUrl(uniqueFileName);
+
+                    uploadedUrls.push(publicUrlData.publicUrl);
+                }
+
+                const targetingSnapshotPayload = {};
+                TARGETING_FIELDS.forEach(field => {
+                    targetingSnapshotPayload[field.key + '_snapshot'] = targetingValues[field.key];
+                });
+
+                // A single database function call instead of 3 separate
+                // client-side writes (insert + seat decrement + institution
+                // count increment). This matters for two reasons, not just
+                // one: it's the only way this can work at all once
+                // registrations/courses/course_institutions are RLS-locked
+                // to admin-only direct access, and it re-verifies every cap
+                // against live data with row locks inside one transaction —
+                // closing the exact race condition the old 3-step version
+                // had (two people registering at once could each read a
+                // stale count and both get in over a cap).
+                const { error: rpcError } = await client.rpc('submit_registration', {
+                    p_course_id: courseId,
+                    p_institution_id: resolvedInstitutionId,
+                    p_phone_number: phoneNumber,
+                    p_sex: sexValue,
+                    p_staff_name: staffName,
+                    p_staff_number: staffNumber,
+                    p_designation: designation,
+                    p_designation_category: designationCategory,
+                    p_specialization: specialization,
+                    p_institution_name: institutionSnapshotString,
+                    p_file_urls: uploadedUrls,
+                    p_job_level_snapshot: targetingSnapshotPayload.job_level_snapshot,
+                    p_nationality_snapshot: targetingSnapshotPayload.nationality_snapshot,
+                    p_education_qualification_snapshot: targetingSnapshotPayload.education_qualification_snapshot,
+                    p_experience_years_snapshot: targetingSnapshotPayload.experience_years_snapshot,
+                    p_organization_snapshot: targetingSnapshotPayload.organization_snapshot,
+                    p_directorate_snapshot: targetingSnapshotPayload.directorate_snapshot,
+                    p_program_type_snapshot: targetingSnapshotPayload.program_type_snapshot,
+                    p_attendance_nature_snapshot: targetingSnapshotPayload.attendance_nature_snapshot
+                });
+
+                if (rpcError) {
+                    // Postgres error code 23505 = unique_violation — this is
+                    // the database's own backstop against the exact
+                    // race-condition case the proactive check above can't
+                    // close on its own (two submissions landing within
+                    // milliseconds of each other).
+                    if (rpcError.code === '23505' || /registrations_one_per_activity/.test(rpcError.message || '')) {
+                        throw new Error('This staff number is already registered for this activity.');
+                    }
+                    throw new Error(rpcError.message);
+                }
+
+                // submit_registration doesn't return the new row's ID (it's
+                // an atomic all-in-one function, deliberately not touched
+                // here) — a follow-up lookup by course_id + staff_number is
+                // safe since that pair is what actually identifies this
+                // registration, same lookup pattern already used for
+                // attendance check-in and certificate generation.
+                // submit_registration doesn't return the new row's ID (it's
+                // an atomic all-in-one function, deliberately not touched
+                // here) — a follow-up lookup by course_id + staff_number is
+                // safe since that pair is what actually identifies this
+                // registration, same lookup pattern already used for
+                // attendance check-in and certificate generation. Now also
+                // used to link the new row to its participant record (see
+                // sql/participants.sql) — the participant upsert itself
+                // happens as a separate step here rather than inside
+                // submit_registration, since that RPC's source isn't
+                // touchable.
+                const customAnswers = collectCustomQuestionAnswers();
+                const firstLogTitle = document.getElementById('firstLogTitle').value.trim();
+                const firstLogDept = document.getElementById('firstLogDept').value;
+                const firstLogDateFrom = document.getElementById('firstLogDateFrom').value;
+                const firstLogDateTo = document.getElementById('firstLogDateTo').value;
+                const hasFirstLogEntry = firstLogTitle && firstLogDept && firstLogDateFrom && firstLogDateTo;
+
+                // .maybeSingle() throws (and silently comes back with
+                // newReg === null, since the error here isn't checked) the
+                // moment this course_id + staff_number pair ever matches
+                // MORE than one row — which is exactly what silently
+                // skipped the whole block below (custom answers, the
+                // first Logged Entry, and the participant link) for some
+                // participants, even though they'd filled in the form
+                // correctly. Ordering by newest and taking the first row
+                // instead of maybeSingle() means a stray duplicate can
+                // never again make this lookup come back empty.
+                const { data: newRegRows, error: newRegLookupErr } = await client
+                    .from('registrations')
+                    .select('id')
+                    .eq('course_id', courseId)
+                    .ilike('staff_number', staffNumber)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                const newReg = (newRegRows && newRegRows[0]) || null;
+                // The registration itself (submit_registration above) has
+                // already committed successfully by this point — this is
+                // only the follow-up lookup used to attach custom answers,
+                // a first-session log entry, and the participant link. If
+                // it errors or comes back empty (network blip, replication
+                // lag), those three things get silently skipped below with
+                // no record of it; logging it here at least leaves a trace
+                // for the admin to reconcile, same soft-fail convention as
+                // the participant-link try/catch further down.
+                if (!newReg) {
+                    console.error('Follow-up registration lookup failed after a successful submit — custom answers, first-session log entry, and participant link were skipped:', newRegLookupErr);
+                }
+
+                if (newReg) {
+                    if (customAnswers.length > 0) {
+                        await client.from('question_responses').insert(
+                            customAnswers.map(a => ({ registration_id: newReg.id, question_id: a.question_id, response_value: a.response_value }))
+                        );
+                    }
+                    if (hasFirstLogEntry) {
+                        // "Organized By" (firstLogDept) is saved on the entry
+                        // row itself just below — that is the ONLY place it
+                        // lives. It is deliberately NOT written over the
+                        // registration's institution_name_snapshot /
+                        // institution_id anymore: that column is the
+                        // participant's own institution ("Institution
+                        // Origin" in Participant Registrations), and
+                        // overwriting it made Institution Origin and the
+                        // Logged Entries department always show the same
+                        // value. Only the "confirmed through the log" flag
+                        // is set here, so the Courses-per-Department report
+                        // keeps working exactly as before.
+                        await client.from('registrations').update({
+                            department_chosen_via_log: true
+                        }).eq('id', newReg.id);
+
+                        // department was missing here — the entry's own
+                        // "Organized By" choice (firstLogDept) was applied
+                        // to the registration's institution_name_snapshot
+                        // just above, but never saved onto the entry row
+                        // itself, so the Participant Registrations page's
+                        // "Logged Entries (Title / Date / Department)"
+                        // column and the Courses-per-Department report
+                        // both had to fall back to guessing it.
+                        await client.from('activity_log_entries').insert({
+                            registration_id: newReg.id, title: firstLogTitle,
+                            entry_date_from: firstLogDateFrom, entry_date_to: firstLogDateTo,
+                            department: firstLogDept
+                        });
+                    }
+
+                    // Participant identity: one row per staff number,
+                    // reused across every course registration. This uses
+                    // the participant's OWN institution/department as
+                    // entered at registration (institutionSnapshotString),
+                    // independent of the "Organized By" override just
+                    // above — that override is about crediting whichever
+                    // department ran THIS session, not the participant's
+                    // home institution. Failures here are logged but never
+                    // block the registration itself, which the RPC above
+                    // has already committed — sql/participants.sql's own
+                    // backfill query can always repair a missed link later.
+                    try {
+                        const participantFields = {
+                            staff_name: staffName,
+                            phone_number: phoneNumber,
+                            sex: sexValue,
+                            designation: designation,
+                            designation_category: designationCategory,
+                            specialization: specialization,
+                            institution_id: resolvedInstitutionId,
+                            institution_name: institutionSnapshotString,
+                            // Stamps which calendar year these fields were
+                            // just confirmed for — isProfileCurrentForThisYear
+                            // compares this against the current year on every
+                            // later registration to decide whether to lock
+                            // the fields (same year) or reopen them for
+                            // review (a new year has started since).
+                            profile_year: new Date().getFullYear()
+                        };
+                        // Job Level, Nationality, etc. — only included when
+                        // this course actually asked for them (a course
+                        // that doesn't show/require a given field leaves it
+                        // out of targetingValues as an empty string, and
+                        // blindly saving that would erase a value a PAST
+                        // course's registration already captured).
+                        // Directorate, Type of Program, and Nature of
+                        // Attendance are never written to the participant's
+                        // saved profile here — they change per activity, so
+                        // "saving" one as this participant's fixed value
+                        // would be wrong the moment they attend a different
+                        // kind of activity. Each registration's own answer
+                        // is still captured below via targetingSnapshotPayload
+                        // / p_..._snapshot, same as before.
+                        const targetingLabelByKey = {};
+                        TARGETING_FIELDS.forEach(field => {
+                            if (PER_ACTIVITY_TARGETING_KEYS.includes(field.key)) return;
+                            targetingLabelByKey[field.key] = field.label;
+                            if (targetingValues[field.key]) participantFields[field.key] = targetingValues[field.key];
+                        });
+
+                        let participantId;
+                        if (matchedParticipant) {
+                            const changedLabels = [];
+                            const labelByField = {
+                                staff_name: 'Name', phone_number: 'Phone', sex: 'Gender',
+                                designation: 'Designation', designation_category: 'Designation Category',
+                                specialization: 'Specialization', institution_name: 'Institution',
+                                profile_year: 'Profile Year (annual refresh)',
+                                ...targetingLabelByKey
+                            };
+                            Object.keys(participantFields).forEach(key => {
+                                if ((matchedParticipant[key] || '') !== (participantFields[key] || '')) changedLabels.push(labelByField[key] || key);
+                            });
+
+                            participantId = matchedParticipant.id;
+                            // Core profile fields are locked on the form for a
+                            // returning staff number (see
+                            // lockProfileFieldsForReturningParticipant) — so on
+                            // a normal re-registration nothing here actually
+                            // differs from what's already saved, and there's
+                            // no reason to rewrite the row. Only write when
+                            // something genuinely changed, which in practice
+                            // now only happens the first time a course asks
+                            // for a targeting field (Job Level, Nationality,
+                            // ...) this participant was never asked for before.
+                            if (changedLabels.length > 0) {
+                                await client.from('participants').update(participantFields).eq('id', participantId);
+                            }
+
+                            await client.from('registration_events_log').insert({
+                                event_type: 'existing_participant_enrolled',
+                                participant_id: participantId, staff_number: staffNumber, staff_name: staffName,
+                                course_id: courseId, course_name: currentCourse ? currentCourse.name : null
+                            });
+                            if (changedLabels.length > 0) {
+                                await client.from('registration_events_log').insert({
+                                    event_type: 'participant_info_updated',
+                                    participant_id: participantId, staff_number: staffNumber, staff_name: staffName,
+                                    course_id: courseId, course_name: currentCourse ? currentCourse.name : null,
+                                    details: `Changed: ${changedLabels.join(', ')}`
+                                });
+                            }
+                        } else {
+                            const { data: newParticipant, error: participantInsertErr } = await client
+                                .from('participants')
+                                .insert({ staff_number: staffNumber, ...participantFields })
+                                .select('id')
+                                .single();
+                            if (participantInsertErr) throw participantInsertErr;
+                            participantId = newParticipant.id;
+
+                            await client.from('registration_events_log').insert({
+                                event_type: 'new_participant',
+                                participant_id: participantId, staff_number: staffNumber, staff_name: staffName,
+                                course_id: courseId, course_name: currentCourse ? currentCourse.name : null
+                            });
+                        }
+
+                        await client.from('registrations').update({ participant_id: participantId }).eq('id', newReg.id);
+                    } catch (participantLinkErr) {
+                        console.error('Participant link failed (registration itself still succeeded):', participantLinkErr);
+                    }
+                }
+
+                document.getElementById('customQuestionsContainer').innerHTML = '';
+                customQuestionsCache = [];
+                document.getElementById('firstLogTitle').value = '';
+                document.getElementById('firstLogDept').value = '';
+                document.getElementById('firstLogDateFrom').value = '';
+                document.getElementById('firstLogDateTo').value = '';
+                showSimpleSuccessCard('You are registered successfully!');
+                
+                document.getElementById('phoneNumber').value = '';
+                document.getElementById('sexSelect').value = '';
+                document.getElementById('staffName').value   = '';
+                document.getElementById('certNameAgreement').checked = false;
+                document.getElementById('staffNumber').value = '';
+                document.getElementById('staffNumber').readOnly = false;
+                document.getElementById('designationSelect').value = '';
+                document.getElementById('otherDesignationInput').value = '';
+                document.getElementById('otherDesignationInput').classList.add('hidden-element');
+                document.getElementById('specializationInput').value = '';
+                document.getElementById('institutionTypeSelect').value = '';
+                document.getElementById('departmentSelect').value = '';
+                document.getElementById('otherInstitutionInput').value = '';
+                resetOtherFreeText();
+                // Neither of these is toggled by toggleFormVisibility —
+                // departmentContainer/otherInstitutionContainer follow
+                // institutionTypeSelect via renderInstitutionFields(), and
+                // dynamicUploadsContainer holds whatever the previous
+                // course's upload requirements rendered. Without this,
+                // both stayed visible under the freshly-reset Staff Number
+                // step after a successful submission.
+                renderInstitutionFields();
+                document.getElementById('dynamicUploadsContainer').innerHTML = '';
+                TARGETING_FIELDS.forEach(field => {
+                    const select = document.getElementById('reg_' + field.key);
+                    if (select) select.value = '';
+                });
+                document.getElementById('courseSelect').value = '';
+                resetStaffGate();
+                
+                await loadRegistrationFormConfig();
+                applyDirectCourseLinkFromUrl();
+
+            } catch (err) {
+                alert(err.message || "An error occurred.");
+            } finally {
+                regBtn.disabled = false;
+                regBtn.innerText = "Register Now";
+            }
+        }
+
+        document.getElementById('institutionTypeSelect').addEventListener('change', renderInstitutionFields);
+        document.getElementById('otherInstitutionInput').addEventListener('change', handleOtherInstitutionChange);
+        document.getElementById('courseSelect').addEventListener('change', handleCourseSelectionChange);
+        document.getElementById('staffGateContinueBtn').addEventListener('click', handleStaffGateContinue);
+        document.getElementById('staffNumberGateInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleStaffGateContinue(); }
+        });
+        document.getElementById('staffGateChangeBtn').addEventListener('click', () => {
+            resetStaffGate();
+        });
+        
+        document.getElementById('sexSelect').addEventListener('change', updateSelectableCoursesOptions);
+        document.getElementById('designationSelect').addEventListener('change', handleDesignationChange);
+        function applyDirectCourseLinkFromUrl() {
+            const courseId = coursesCached[0] && !linkProblem ? coursesCached[0].id : null;
+            if (!courseId) return;
+
+            const courseDropdown = document.getElementById('courseSelect');
+            const exists = Array.from(courseDropdown.options).some(opt => Number(opt.value) === courseId);
+            if (!exists) return; // not available (closed/ended/full): evaluateActivityLink already shows the message
+
+            courseDropdown.value = String(courseId);
+            courseDropdown.disabled = true;
+            // Doesn't call handleCourseSelectionChange() here — the Staff
+            // Number step now comes BEFORE course selection, so this just
+            // pre-selects and locks the dropdown; handleStaffGateContinue
+            // picks up from here and continues into course-specific setup
+            // once the staff number is resolved.
+        }
+
+        document.getElementById('otherDesignationInput').addEventListener('input', updateSelectableCoursesOptions);
+
+        // A ?staff=... URL param (set by activity-log.js when it redirects
+        // a not-yet-registered staff number here) skips the Staff Number
+        // step's own manual entry — they already typed it once, on the
+        // Activity Log page, so this carries it straight through instead
+        // of asking for the same number a second time.
+        function applyStaffNumberFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const staffNumber = params.get('staff');
+            if (!staffNumber) return;
+            if (document.getElementById('registerFormCard').classList.contains('hidden-element')) return; // no valid activity link
+            document.getElementById('staffNumberGateInput').value = staffNumber;
+            handleStaffGateContinue();
+        }
+
+        document.getElementById('regBtn').addEventListener('click', handleSubmit);
+
+        document.getElementById('closeClosedNoticeBtn').addEventListener('click', () => {
+            // Same window.close()-with-fallback pattern used elsewhere —
+            // browsers don't allow a script to close a tab it didn't open
+            // itself, so this falls back to a plain "you're done" message.
+            window.close();
+            document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
+        });
+
+        document.getElementById('closeAlreadyRegisteredBtn').addEventListener('click', () => {
+            window.close();
+            document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
+        });
+
+        document.getElementById('closeNotEligibleBtn').addEventListener('click', () => {
+            window.close();
+            document.querySelector('.container').innerHTML = '<p style="text-align:center; color:#16a34a; font-weight:bold; padding:60px 0;">All done — you can close this page now.</p>';
+        });
+
+        loadRegistrationFormConfig().then(() => {
+            applyDirectCourseLinkFromUrl();
+            applyStaffNumberFromUrl();
+        });

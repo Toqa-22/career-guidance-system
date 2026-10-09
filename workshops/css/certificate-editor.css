@@ -1,0 +1,101 @@
+.rect-data-field-highlight {
+    background: #fff7ed;
+    border: 2px solid #f59e0b;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+.rect-data-field-highlight select,
+.rect-data-field-highlight input {
+    border-color: #f59e0b !important;
+    background: white;
+}
+.rect-data-field-highlight select:focus,
+.rect-data-field-highlight input:focus {
+    border-color: #d97706 !important;
+}
+
+.cert-editor-stage {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    background: #f1f5f9;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    overflow: hidden;
+    touch-action: none;
+}
+.cert-editor-empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+    width: 100%;
+}
+#certPreviewImg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.cert-rect {
+    position: absolute;
+    border: 2px solid #7C3AED;
+    background: rgba(124, 58, 237, 0.12);
+    cursor: move;
+    display: flex;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-width: 20px;
+    min-height: 16px;
+}
+.cert-rect.selected {
+    border-color: #5B21B6;
+    background: rgba(124, 58, 237, 0.15);
+    z-index: 5;
+}
+.cert-rect-label {
+    position: absolute;
+    top: -22px;
+    left: -2px;
+    background: #7C3AED;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px 4px 0 0;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.cert-rect.selected .cert-rect-label {
+    background: #5B21B6;
+}
+.cert-rect-preview-text {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    padding: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    line-height: 1.1;
+}
+.cert-rect-resize-handle {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 14px;
+    height: 14px;
+    background: #7C3AED;
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: nwse-resize;
+}
+.cert-rect.selected .cert-rect-resize-handle {
+    background: #5B21B6;
+}
+
+@media (max-width: 640px) {
+    .cert-editor-stage { width: 100%; }
+}
