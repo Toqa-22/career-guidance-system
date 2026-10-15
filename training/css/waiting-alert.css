@@ -1,0 +1,107 @@
+/* ==========================================================================
+   waiting-alert.css
+   نافذة تنبيه تظهر تلقائياً في منتصف الشاشة وبحجم كبير (راجع js/waiting-alert.js)
+   في كل مرة يدخل فيها المستخدم الموقع أو ينتقل لصفحة مختلفة، وأيضاً كل 3
+   ساعات إن بقي على نفس الصفحة دون تنقّل — تعرض عدد المتدربين الحاليين في
+   قائمة الانتظار (نفس نمط .modal-overlay/.modal-box المستخدم في نوافذ
+   التأكيد بالموقع — راجع style.css — لكن بحجم أكبر ولمسة حمراء (--danger)
+   للفت الانتباه). تُحمَّل هذه الأنماط في كل صفحة محمية تعرض النافذة
+   (register.html، dashboard.html، reports.html — باستثناء waiting.html
+   نفسها وindex.html). تعتمد كلياً على متغيرات التصميم المشتركة من style.css
+   فتُطابق شكل أي صفحة تظهر فيها تلقائياً دون أي تخصيص إضافي لكل صفحة.
+   ========================================================================== */
+
+.waiting-alert-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(20,32,46,0.5);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 4000;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.waiting-alert-overlay.show{ opacity: 1; }
+
+.waiting-alert-card{
+  position: relative;
+  background: var(--card);
+  border-top: 6px solid var(--danger);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 44px 40px 36px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  transform: scale(.92) translateY(10px);
+  transition: transform 220ms ease;
+}
+.waiting-alert-overlay.show .waiting-alert-card{ transform: scale(1) translateY(0); }
+
+.waiting-alert-icon{
+  width: 76px; height:76px; border-radius:50%;
+  background: var(--danger-light);
+  color: var(--danger);
+  display:flex; align-items:center; justify-content:center;
+  font-size:36px;
+  margin: 0 auto 20px;
+}
+
+.waiting-alert-title{
+  font-weight:800;
+  font-size:21px;
+  color: var(--text);
+  margin-bottom:12px;
+}
+.waiting-alert-count{
+  font-size:15.5px;
+  color: var(--text-muted);
+  line-height:1.8;
+  margin-bottom:30px;
+}
+.waiting-alert-count strong{
+  color: var(--danger);
+  font-size:19px;
+}
+
+.waiting-alert-actions{ display:flex; gap:10px; }
+.waiting-alert-actions button{
+  flex:1;
+  padding:14px;
+  border-radius: var(--radius-sm);
+  border:none;
+  font-weight:800;
+  cursor:pointer;
+  font-size:14.5px;
+  transition: transform var(--transition), background var(--transition);
+}
+.waiting-alert-actions button:hover{ transform: translateY(-1px); }
+.waiting-alert-dismiss{ background: var(--gray-status-light); color: var(--text); }
+.waiting-alert-go{ background: var(--danger); color:#fff; }
+.waiting-alert-go:hover{ background:#B5394A; }
+
+.waiting-alert-close{
+  position:absolute;
+  top:16px;
+  inset-inline-end:16px;
+  background:none;
+  border:none;
+  font-size:17px;
+  color: var(--text-muted);
+  cursor:pointer;
+  padding:6px;
+  line-height:1;
+  border-radius:8px;
+  transition: background var(--transition), color var(--transition);
+}
+.waiting-alert-close:hover{ background: var(--danger-light); color: var(--danger); }
+
+@media (max-width:480px){
+  .waiting-alert-card{ padding: 34px 22px 26px; }
+  .waiting-alert-icon{ width:62px;height:62px;font-size:30px; margin-bottom:16px; }
+  .waiting-alert-title{ font-size:18px; }
+  .waiting-alert-count{ font-size:14px; margin-bottom:24px; }
+  .waiting-alert-actions{ flex-direction:column; }
+}
