@@ -1,0 +1,105 @@
+/* ===== Reusable "multi-select with All" checkbox component ===== */
+.targeting-field-block {
+    margin-bottom: 18px;
+}
+.targeting-field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.targeting-field-label {
+    display: block;
+    font-weight: bold;
+    font-size: 13px;
+    color: #334155;
+    margin-bottom: 0;
+}
+.field-visibility-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: normal;
+    color: #475569;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.field-visibility-toggle-label input { width: auto; cursor: pointer; }
+.multiselect-box.field-hidden-from-registrants {
+    opacity: .45;
+    pointer-events: none;
+    position: relative;
+}
+.multiselect-box.field-hidden-from-registrants::after {
+    content: "Hidden from registrants";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,.6);
+    font-size: 12px;
+    font-weight: bold;
+    color: #64748b;
+    border-radius: 12px;
+}
+.multiselect-box {
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    padding: 12px;
+}
+.ms-option {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 13.5px;
+    color: #334155;
+    cursor: pointer;
+    border-radius: 6px;
+}
+.ms-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex-shrink: 0;
+    order: -1;
+}
+.ms-option:hover { background: #f1f5f9; }
+.ms-option.ms-disabled { opacity: .45; cursor: not-allowed; }
+.ms-option.ms-disabled:hover { background: none; }
+.ms-all {
+    font-weight: bold;
+    color: #7C3AED;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 6px;
+    padding-bottom: 10px;
+    justify-content: flex-start;
+}
+.ms-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.ms-search-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+.ms-search-input:focus { outline: none; border-color: #7C3AED; }
+
+@media (max-width: 640px) {
+    .ms-options-list { max-height: 220px; }
+}
