@@ -205,6 +205,10 @@
                         <label class="report-field-label">To</label>
                         <input type="date" id="deptChartTo">
                     </div>
+                    <div class="report-field">
+                        <label class="report-field-label">Department</label>
+                        <select id="deptChartDepartment"><option value="">All departments</option></select>
+                    </div>
                     <button type="button" class="btn-action btn-add" onclick="generateDepartmentChartPdf()">Generate Report</button>
                 </div>
                 <p id="deptChartNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
@@ -241,6 +245,10 @@
                         <label class="report-field-label">To</label>
                         <input type="date" id="coursesDeptChartTo">
                     </div>
+                    <div class="report-field">
+                        <label class="report-field-label">Department</label>
+                        <select id="coursesDeptChartDepartment"><option value="">All departments</option></select>
+                    </div>
                     <button type="button" class="btn-action btn-add" onclick="generateCoursesPerDepartmentPdf()">Generate Report</button>
                 </div>
                 <p id="coursesDeptChartNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
@@ -265,7 +273,7 @@
 </div>
 </div>
 
-<script type="module" src="../js/report.js?v=22"></script>
+<script type="module" src="../js/report.js?v=26"></script>
 <script src="../js/sidebar.js"></script>
 <script type="module" src="../js/hall-requests-alert.js"></script>
 </body>
