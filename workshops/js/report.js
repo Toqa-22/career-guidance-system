@@ -41,6 +41,39 @@ function populateCourseFilterSelects() {
     });
 }
 
+// "Department" choosers of the two Ibra-department PDFs (Staffing Chart and
+// Activity log: Courses per Department): "All departments" or one Ibra
+// department. Option VALUE is the full institution name ("Ibra - X"); the
+// label drops the prefix. If the list cannot be loaded the chooser simply
+// stays on "All departments", so the reports behave exactly as before.
+async function populateDepartmentSelects() {
+    const ids = ['deptChartDepartment', 'coursesDeptChartDepartment'];
+    try {
+        const { data, error } = await client.from('institutions').select('name');
+        if (error || !data) return;
+        const names = data.map(i => i.name).filter(n => n && n.startsWith('Ibra - ')).sort((a, b) => a.localeCompare(b));
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const previous = el.value;
+            el.innerHTML = '';
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = 'All departments';
+            el.appendChild(all);
+            names.forEach(n => {
+                const o = document.createElement('option');
+                o.value = n;
+                o.textContent = n.replace('Ibra - ', '');
+                el.appendChild(o);
+            });
+            if (names.includes(previous)) el.value = previous;
+        });
+    } catch (e) {
+        console.error('Could not load the department list:', e);
+    }
+}
+
 function formatDateDDMMYYYY(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -156,7 +189,45 @@ window.exportStaffReportPdf = async function () {
 
     const participantName = filtered[0].staff_name || 'Unknown';
     const rangeLabel = (fromStr || toStr) ? `${fromStr || '…'} to ${toStr || '…'}` : 'All time';
-    const rows = filtered.map((r, i) => [i + 1, reshapeArabicForPdf(r.course_name || 'Unknown activity'), '1']);
+    // "Without attendance" (self-log) activities: the registration only points
+    // at a generic placeholder course, the REAL titles are the person's
+    // Activity Log entries (the first one is written at the registration form
+    // and stored in the same table). So each such registration is listed as
+    // one row per logged title instead of one generic row. If anything about
+    // this lookup fails, or a registration has no entries, it falls back to
+    // the single course-name row exactly as before.
+    const selfLogRegIds = new Set();
+    const entriesByRegId = new Map();
+    try {
+        const { data: crs } = await client.from('courses').select('id, attendance_required');
+        const selfLogCourseIds = new Set((crs || []).filter(c => c.attendance_required === false).map(c => c.id));
+        filtered.forEach(r => { if (selfLogCourseIds.has(r.course_id)) selfLogRegIds.add(r.id); });
+        if (selfLogRegIds.size > 0) {
+            const { data: ents, error: entErr } = await client
+                .from('activity_log_entries')
+                .select('registration_id, title, entry_date_from')
+                .in('registration_id', Array.from(selfLogRegIds))
+                .order('entry_date_from', { ascending: true });
+            if (entErr) throw entErr;
+            (ents || []).forEach(e => {
+                if (!entriesByRegId.has(e.registration_id)) entriesByRegId.set(e.registration_id, []);
+                entriesByRegId.get(e.registration_id).push(e);
+            });
+        }
+    } catch (e) {
+        console.error('Could not load activity log titles for the staff report:', e);
+        entriesByRegId.clear();
+    }
+    const titleList = [];
+    filtered.forEach(r => {
+        const ents = entriesByRegId.get(r.id);
+        if (selfLogRegIds.has(r.id) && ents && ents.length > 0) {
+            ents.forEach(e => titleList.push((e.title || '').trim() || r.course_name || 'Unknown activity'));
+        } else {
+            titleList.push(r.course_name || 'Unknown activity');
+        }
+    });
+    const rows = titleList.map((t, i) => [i + 1, reshapeArabicForPdf(t), '1']);
 
     try {
         const logo = await getLogoBase64().catch(() => null);
@@ -317,6 +388,7 @@ window.exportDateRangeReportPdf = async function () {
 
 loadData();
 loadEvaluationsForReport();
+populateDepartmentSelects();
 
 // Populates the Evaluation / Exam Report's picker with every evaluation/exam
 // that exists, newest first — same "Title — Activity Name" labelling used
@@ -356,10 +428,22 @@ const REPORT_FIELD_DEFINITIONS = [
 
 // Group a filtered set of registrations by one snapshot column and count
 // participants per value, sorted highest-first so the busiest group leads.
+// Experience Years has always been a fixed list on the registration form, but
+// older registrations were saved with a plain hyphen / extra spaces / other
+// letter case ("16-20 years" vs "16–20 years"), which made the same range
+// show up as two separate rows. For this one field those spellings are
+// merged into the form's own wording; every other field is untouched.
+const EXPERIENCE_OPTIONS = ['Less than 1 year to 5 years', '6–10 years', '11–15 years', '16–20 years', '21–25 years', '26 years or more'];
+function normalizeExperienceValue(raw) {
+    const clean = raw.replace(/\s*[-\u2010-\u2015\u2212]\s*/g, '–').replace(/\s+/g, ' ').trim();
+    return EXPERIENCE_OPTIONS.find(o => o.toLowerCase() === clean.toLowerCase()) || clean;
+}
+
 function buildFrequencyRows(records, fieldKey) {
     const counts = new Map();
     records.forEach(r => {
-        const value = (r[fieldKey] || '').toString().trim() || 'Not specified';
+        let value = (r[fieldKey] || '').toString().trim() || 'Not specified';
+        if (fieldKey === 'experience_years_snapshot' && value !== 'Not specified') value = normalizeExperienceValue(value);
         counts.set(value, (counts.get(value) || 0) + 1);
     });
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -734,19 +818,38 @@ window.generateDepartmentChartPdf = async function () {
         const { data: regs, error: regErr } = await client.from('registrations').select('institution_name_snapshot, staff_number, created_at');
         if (regErr) throw regErr;
 
-        const attendedByInstitution = new Map();
+        // Each person is counted ONCE in this report: the same staff number
+        // written with stray spaces / other letter case / Arabic-Indic digits
+        // is one person, and a person who registered under more than one
+        // department is counted only in the department of their most recent
+        // registration (inside the chosen period). Without this, "Attended"
+        // could pass "Total Staff" for a department.
+        const staffKey = (v) => String(v).trim()
+            .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+            .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+            .replace(/\s+/g, '').toUpperCase();
+        const latestDeptByStaff = new Map();
         (regs || [])
             .filter(r => !(fromStr || toStr) || isWithinRange(r.created_at, fromStr, toStr))
-            .forEach(r => {
-                const name = (r.institution_name_snapshot || '').trim();
-                if (!name || !r.staff_number) return;
-                if (!attendedByInstitution.has(name)) attendedByInstitution.set(name, new Set());
-                attendedByInstitution.get(name).add(r.staff_number);
-            });
+            .filter(r => (r.institution_name_snapshot || '').trim() && r.staff_number && staffKey(r.staff_number))
+            .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+            .forEach(r => latestDeptByStaff.set(staffKey(r.staff_number), r.institution_name_snapshot.trim()));
+        const attendedByInstitution = new Map();
+        latestDeptByStaff.forEach((name, key) => {
+            if (!attendedByInstitution.has(name)) attendedByInstitution.set(name, new Set());
+            attendedByInstitution.get(name).add(key);
+        });
 
-        const rows = insts
+        const allRows = insts
             .map(i => ({ name: i.name, total: i.staff_count, attended: (attendedByInstitution.get(i.name.trim()) || new Set()).size }))
             .sort((a, b) => b.total - a.total);
+        // Department chooser: '' = all departments, otherwise just that one.
+        const chosenDept = (document.getElementById('deptChartDepartment') || {}).value || '';
+        const rows = chosenDept ? allRows.filter(r => r.name === chosenDept) : allRows;
+        if (rows.length === 0) {
+            note.textContent = 'That department no longer exists — please choose another one.';
+            return;
+        }
 
         const canvas = document.getElementById('deptChartOffscreen');
         // Positioned off-screen (see report.html) rather than
@@ -813,6 +916,7 @@ window.generateDepartmentChartPdf = async function () {
         const logo = await getLogoBase64().catch(() => null);
         const generatedLine = [`Generated: ${new Date().toLocaleString()}`];
         if (fromStr || toStr) generatedLine.push(`Period: ${fromStr ? formatDateDDMMYYYY(fromStr) : 'Start'} – ${toStr ? formatDateDDMMYYYY(toStr) : 'Present'}`);
+        if (chosenDept) generatedLine.push(`Department: ${chosenDept.replace('Ibra - ', '')}`); // drawReportHeader reshapes info lines itself
 
         const page1ImageY = drawReportHeader(doc, logo, 'Ibra Department Staffing Report', generatedLine);
         doc.addImage(countsImage, 'PNG', 14, page1ImageY, 182, 101);
@@ -1075,9 +1179,17 @@ window.generateCoursesPerDepartmentPdf = async function () {
         // map can legitimately be empty (nobody has confirmed a
         // department through Activity Log yet) while departments
         // themselves still exist and should still show up at 0.
-        const rows = allDepts
+        const allRows = allDepts
             .map(dept => ({ dept, count: countByDept.get(dept) || 0 }))
             .sort((a, b) => b.count - a.count);
+        // Department chooser: '' = all departments, otherwise just that one.
+        const chosenDept = (document.getElementById('coursesDeptChartDepartment') || {}).value || '';
+        const chosenShort = chosenDept.replace('Ibra - ', '');
+        const rows = chosenDept ? allRows.filter(r => r.dept === chosenShort) : allRows;
+        if (rows.length === 0) {
+            note.textContent = 'That department no longer exists — please choose another one.';
+            return;
+        }
 
         const canvas = document.getElementById('coursesDeptChartOffscreen');
         const existing = Chart.getChart(canvas);
@@ -1105,6 +1217,8 @@ window.generateCoursesPerDepartmentPdf = async function () {
         const logo = await getLogoBase64().catch(() => null);
         const generatedLine = [`Generated: ${new Date().toLocaleString()}`];
         if (fromStr || toStr) generatedLine.push(`Period: ${fromStr ? formatDateDDMMYYYY(fromStr) : 'Start'} – ${toStr ? formatDateDDMMYYYY(toStr) : 'Present'}`);
+
+        if (chosenDept) generatedLine.push(`Department: ${chosenShort}`); // drawReportHeader reshapes info lines itself
 
         const imageY = drawReportHeader(doc, logo, 'Activity Log: Courses per Department Report', generatedLine);
         doc.addImage(chartImage, 'PNG', 14, imageY, 182, 101);
