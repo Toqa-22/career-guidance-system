@@ -250,6 +250,26 @@ async function saveReassignment(staffKey) {
         return;
     }
 
+    // Also move the person's MASTER profile (participants row), so the public
+    // registration form no longer pre-fills / locks the OLD department the next
+    // time this staff number registers (which would put them back in the old
+    // department in the reports). Matched on the same trim+lowercase identity
+    // used on this page. Best-effort: the registrations above are already saved,
+    // so a problem here only shows a warning (and stays silent if the
+    // participants table / column does not exist on this site).
+    try {
+        const profileFields = { institution_name: newSnapshot };
+        if (matchingInstitution) profileFields.institution_id = matchingInstitution.id;
+        const { error: profileErr } = await client.from('participants').update(profileFields).eq('staff_number_normalized', staffKey);
+        if (profileErr) throw profileErr;
+    } catch (profileUpdateErr) {
+        console.error('Participant master profile update failed (registrations were saved):', profileUpdateErr);
+        const msg = String((profileUpdateErr && profileUpdateErr.message) || profileUpdateErr);
+        if (!/does not exist|relation|column|schema cache/i.test(msg)) {
+            alert('Department changed on all registrations, but the participant\'s saved profile could not be updated: ' + msg);
+        }
+    }
+
     // Reflect the change immediately without a full reload.
     group.registrations.forEach(r => { r.institution_name_snapshot = newSnapshot; });
     applyFilter();
