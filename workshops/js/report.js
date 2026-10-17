@@ -815,8 +815,29 @@ window.generateDepartmentChartPdf = async function () {
         }
         note.textContent = 'Building report...';
 
-        const { data: regs, error: regErr } = await client.from('registrations').select('institution_name_snapshot, staff_number, created_at');
-        if (regErr) throw regErr;
+        // "Attended" = the person took part in at least one activity: checked in
+        // (registrations.attended, which is true after ANY day of a multi-day
+        // activity) or registered in a "without attendance" (self-log) activity,
+        // which has no check-in. People who only registered and never came do not
+        // count. If the `attended` column cannot be read, everyone registered is
+        // counted, as this report did before.
+        let regs, onlyAttended = true;
+        {
+            const first = await client.from('registrations').select('institution_name_snapshot, staff_number, created_at, attended, course_id');
+            if (first.error) {
+                onlyAttended = false;
+                const fallback = await client.from('registrations').select('institution_name_snapshot, staff_number, created_at');
+                if (fallback.error) throw fallback.error;
+                regs = fallback.data;
+            } else {
+                regs = first.data;
+            }
+        }
+        const selfLogCourseIds = new Set();
+        if (onlyAttended) {
+            const { data: crs, error: crsErr } = await client.from('courses').select('id, attendance_required');
+            if (crsErr) onlyAttended = false; else (crs || []).forEach(c => { if (c.attendance_required === false) selfLogCourseIds.add(c.id); });
+        }
 
         // Each person is counted ONCE in this report: the same staff number
         // written with stray spaces / other letter case / Arabic-Indic digits
@@ -831,6 +852,7 @@ window.generateDepartmentChartPdf = async function () {
         const latestDeptByStaff = new Map();
         (regs || [])
             .filter(r => !(fromStr || toStr) || isWithinRange(r.created_at, fromStr, toStr))
+            .filter(r => !onlyAttended || r.attended === true || selfLogCourseIds.has(r.course_id))
             .filter(r => (r.institution_name_snapshot || '').trim() && r.staff_number && staffKey(r.staff_number))
             .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
             .forEach(r => latestDeptByStaff.set(staffKey(r.staff_number), r.institution_name_snapshot.trim()));
