@@ -114,7 +114,9 @@
                                     <option value="Male">Male Only</option>
                                     <option value="Female">Female Only</option>
                                 </select>
-                                <input type="text" id="courseInstructorName" placeholder="Organized by (optional)">
+                                <select id="courseInstructorName" required>
+                                    <option value="">-- Organized By (required) --</option>
+                                </select>
                             </div>
 
                             <div class="input-row" style="grid-template-columns: 1fr;">
@@ -387,7 +389,7 @@
 </div>
 </div>
 
-<script type="module" src="../js/create-course.js?v=15"></script>
+<script type="module" src="../js/create-course.js?v=16"></script>
 <script src="../js/sidebar.js"></script>
 <script type="module" src="../js/hall-requests-alert.js"></script>
 </body>
