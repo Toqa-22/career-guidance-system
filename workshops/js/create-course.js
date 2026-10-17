@@ -1240,6 +1240,42 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             if (document.visibilityState === 'visible') refreshChHallOptions();
         });
 
+        // "Organized By" is a REQUIRED choice of one Ibra department. The list is
+        // read live from the institutions table ("Ibra - X" rows, the same list
+        // the admin adds to / deletes from in Institutions), so a department
+        // added or removed there shows up here (on load, when the tab is focused
+        // again, and once more right before saving). The saved value is the short
+        // department name (e.g. "Pharmacy").
+        async function refreshOrganizedByOptions() {
+            const select = document.getElementById('courseInstructorName');
+            if (!select) return;
+            const { data, error } = await client.from('institutions').select('name');
+            if (error || !data) return;
+            const names = data
+                .map(i => (i.name || '').trim())
+                .filter(n => n.startsWith('Ibra - '))
+                .map(n => n.replace('Ibra - ', '').trim())
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b));
+            const previous = select.value;
+            select.innerHTML = '';
+            const first = document.createElement('option');
+            first.value = '';
+            first.textContent = '-- Organized By (required) --';
+            select.appendChild(first);
+            names.forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n;
+                opt.textContent = n;
+                select.appendChild(opt);
+            });
+            if (names.includes(previous)) select.value = previous;
+        }
+        const organizedByReady = refreshOrganizedByOptions();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') refreshOrganizedByOptions();
+        });
+
         // ============================================================
         // Book a Hall — multi-date entries + weekly repeat, same as the
         // standalone Hall Reservation page's New Reservation form.
@@ -1415,7 +1451,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // keeps the form valid regardless of whether that SQL
             // migration has actually been run yet.
             document.getElementById('courseActivityType').value = course.activity_type || 'Course';
-            document.getElementById('courseInstructorName').value = course.instructor_name || '';
+            // Old activities saved a free-text value here. It is pre-selected only
+            // when it matches a current Ibra department; otherwise the field stays
+            // empty and a department has to be chosen before saving.
+            await organizedByReady;
+            {
+                const orgSel = document.getElementById('courseInstructorName');
+                const stored = (course.instructor_name || '').replace(/^Ibra - /i, '').trim().toLowerCase();
+                const hit = stored && [...orgSel.options].find(o => o.value && o.value.toLowerCase() === stored);
+                orgSel.value = hit ? hit.value : '';
+            }
             document.getElementById('courseParticipantCount').value = course.participant_count || '';
             document.getElementById('courseAttendanceRequired').checked = course.attendance_required !== false;
             // attendance_days only exists once sql/multi-day-attendance.sql has been run; until then it is simply 1.
@@ -1601,7 +1646,13 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
             const allowed_sex = document.getElementById('courseGender').value;
             const activity_type = document.getElementById('courseActivityType').value || null;
+            await refreshOrganizedByOptions(); // pick up departments added/removed since the page opened
             const instructor_name = document.getElementById('courseInstructorName').value.trim() || null;
+            if (!instructor_name) {
+                alert('Please choose "Organized By" — it is required.');
+                document.getElementById('courseInstructorName').focus();
+                return;
+            }
             const participantCountRaw = document.getElementById('courseParticipantCount').value;
             const participant_count = participantCountRaw === '' ? null : parseInt(participantCountRaw, 10);
             const attendance_required = document.getElementById('courseAttendanceRequired').checked;
