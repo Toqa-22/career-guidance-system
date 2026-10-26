@@ -1240,28 +1240,33 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             if (document.visibilityState === 'visible') refreshChHallOptions();
         });
 
-        // "Organized By" is a REQUIRED choice of one Ibra department. The list is
-        // read live from the institutions table ("Ibra - X" rows, the same list
-        // the admin adds to / deletes from in Institutions), so a department
-        // added or removed there shows up here (on load, when the tab is focused
-        // again, and once more right before saving). The saved value is the short
-        // department name (e.g. "Pharmacy").
-        async function refreshOrganizedByOptions() {
+        // "Organized By" is a REQUIRED two-step choice: first Ibra or Other
+        // (#courseOrganizedByType), then the matching list (#courseInstructorName).
+        // Both lists are read live from the institutions table - the same list the
+        // super admin adds to / deletes from in Institutions - so a change there
+        // shows up here (on load, when the type changes, when the tab is focused
+        // again, and once more right before saving).
+        //   Ibra  -> the "Ibra - X" rows, saved as the short department name ("Pharmacy")
+        //   Other -> every other institution, saved by its name
+        // (the "Other (Please Specify)" catch-all is not a real organizer, so it is left out)
+        const ORGANIZED_BY_PLACEHOLDER = {
+            '': '-- Choose Ibra or Other first --',
+            'Ibra': '-- Choose the Ibra department --',
+            'Other': '-- Choose the institution --'
+        };
+        let organizedByLists = { Ibra: [], Other: [] };
+
+        function fillOrganizedByDepartmentSelect() {
+            const typeSel = document.getElementById('courseOrganizedByType');
             const select = document.getElementById('courseInstructorName');
-            if (!select) return;
-            const { data, error } = await client.from('institutions').select('name');
-            if (error || !data) return;
-            const names = data
-                .map(i => (i.name || '').trim())
-                .filter(n => n.startsWith('Ibra - '))
-                .map(n => n.replace('Ibra - ', '').trim())
-                .filter(Boolean)
-                .sort((a, b) => a.localeCompare(b));
+            if (!typeSel || !select) return;
+            const type = typeSel.value;
+            const names = organizedByLists[type] || [];
             const previous = select.value;
             select.innerHTML = '';
             const first = document.createElement('option');
             first.value = '';
-            first.textContent = '-- Organized By (required) --';
+            first.textContent = ORGANIZED_BY_PLACEHOLDER[type] || ORGANIZED_BY_PLACEHOLDER[''];
             select.appendChild(first);
             names.forEach(n => {
                 const opt = document.createElement('option');
@@ -1269,12 +1274,31 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 opt.textContent = n;
                 select.appendChild(opt);
             });
+            select.disabled = !type;
             if (names.includes(previous)) select.value = previous;
+        }
+
+        async function refreshOrganizedByOptions() {
+            const { data, error } = await client.from('institutions').select('name');
+            if (error || !data) return;
+            const all = data.map(i => (i.name || '').trim()).filter(Boolean);
+            organizedByLists = {
+                Ibra: all
+                    .filter(n => n.startsWith('Ibra - '))
+                    .map(n => n.replace('Ibra - ', '').trim())
+                    .filter(Boolean)
+                    .sort((a, b) => a.localeCompare(b)),
+                Other: all
+                    .filter(n => !n.startsWith('Ibra - ') && n !== 'Other (Please Specify)')
+                    .sort((a, b) => a.localeCompare(b))
+            };
+            fillOrganizedByDepartmentSelect();
         }
         const organizedByReady = refreshOrganizedByOptions();
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') refreshOrganizedByOptions();
         });
+        document.getElementById('courseOrganizedByType').addEventListener('change', fillOrganizedByDepartmentSelect);
 
         // ============================================================
         // Book a Hall — multi-date entries + weekly repeat, same as the
@@ -1451,15 +1475,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // keeps the form valid regardless of whether that SQL
             // migration has actually been run yet.
             document.getElementById('courseActivityType').value = course.activity_type || 'Course';
-            // Old activities saved a free-text value here. It is pre-selected only
-            // when it matches a current Ibra department; otherwise the field stays
-            // empty and a department has to be chosen before saving.
+            // The saved value is a short Ibra department name or an other institution's
+            // name. It is pre-selected (type + name) only when it still matches one of
+            // the current lists; otherwise (an old free-text value, or something an
+            // admin has since deleted) both stay empty and must be chosen before saving.
             await organizedByReady;
             {
+                const typeSel = document.getElementById('courseOrganizedByType');
                 const orgSel = document.getElementById('courseInstructorName');
                 const stored = (course.instructor_name || '').replace(/^Ibra - /i, '').trim().toLowerCase();
-                const hit = stored && [...orgSel.options].find(o => o.value && o.value.toLowerCase() === stored);
-                orgSel.value = hit ? hit.value : '';
+                const findIn = list => stored ? list.find(n => n.toLowerCase() === stored) : undefined;
+                const ibraHit = findIn(organizedByLists.Ibra);
+                const otherHit = ibraHit ? undefined : findIn(organizedByLists.Other);
+                typeSel.value = ibraHit ? 'Ibra' : (otherHit ? 'Other' : '');
+                fillOrganizedByDepartmentSelect();
+                orgSel.value = ibraHit || otherHit || '';
             }
             document.getElementById('courseParticipantCount').value = course.participant_count || '';
             document.getElementById('courseAttendanceRequired').checked = course.attendance_required !== false;
@@ -1647,9 +1677,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const allowed_sex = document.getElementById('courseGender').value;
             const activity_type = document.getElementById('courseActivityType').value || null;
             await refreshOrganizedByOptions(); // pick up departments added/removed since the page opened
+            if (!document.getElementById('courseOrganizedByType').value) {
+                alert('Please choose "Organized By" - Ibra or Other - it is required.');
+                document.getElementById('courseOrganizedByType').focus();
+                return;
+            }
             const instructor_name = document.getElementById('courseInstructorName').value.trim() || null;
             if (!instructor_name) {
-                alert('Please choose "Organized By" — it is required.');
+                alert('Please choose the department / institution under "Organized By" - it is required.');
                 document.getElementById('courseInstructorName').focus();
                 return;
             }
@@ -2187,6 +2222,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         
             const form = document.getElementById('courseConfigForm');
             form.reset();
+            fillOrganizedByDepartmentSelect(); // form.reset() puts both Organized By selects back to their first option
             prefillChEntranceName(); // form.reset() blanks it; it is locked, so put the name back
             document.getElementById('courseComment').value = '';
             syncAttendanceDaysRowVisibility();
