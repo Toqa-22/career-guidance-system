@@ -15,6 +15,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             if (row && box) row.style.display = box.checked ? '' : 'none';
         }
         let globalInstitutionsList = [];
+        // The allocation map Section 4 was last drawn with — lets an institution
+        // added later with "+ Add" get the same default tick a listed one got.
+        let lastAllocationMap = [];
 
         // Featured image: holds a freshly-picked File pending upload on save,
         // and the already-saved public URL (when editing / unchanged).
@@ -978,6 +981,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         }
 
         function renderAllocationMappingFramework(currentMap = []) {
+            lastAllocationMap = currentMap;
             const ibraContainer = document.getElementById('allocationWrapperIbra');
             const otherContainer = document.getElementById('allocationWrapperOther');
 
@@ -1276,6 +1280,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             });
             select.disabled = !type;
             if (names.includes(previous)) select.value = previous;
+            syncOrganizedByAddRow();
         }
 
         async function refreshOrganizedByOptions() {
@@ -1299,6 +1304,113 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             if (document.visibilityState === 'visible') refreshOrganizedByOptions();
         });
         document.getElementById('courseOrganizedByType').addEventListener('change', fillOrganizedByDepartmentSelect);
+
+        // ---- "+ Add" under the Organized By list (only for "Other") ------------
+        // Type a name in the box under the list and press "+ Add" (or Enter): it is
+        // added to the SAME institutions table the "Other" list is read from, with
+        // the same rules as the Health Center Institution admin page (saved exactly
+        // as typed, never an "Ibra - " department), then selected here. Nothing is
+        // saved to the activity itself until Save is pressed, as before.
+        function syncOrganizedByAddRow() {
+            const row = document.getElementById('addOrganizerInstitutionRow');
+            const typeSel = document.getElementById('courseOrganizedByType');
+            if (row && typeSel) row.classList.toggle('hidden-element', typeSel.value !== 'Other');
+        }
+
+        // Gives a just-added institution its own row in Section 4 (Institutional
+        // Allocations), with the same defaults a listed institution gets, without
+        // redrawing (and so resetting) the rows already there.
+        function addInstitutionToAllocationSection(inst) {
+            if (!inst || inst.id == null) return;
+            if (!globalInstitutionsList.some(i => i.id === inst.id)) globalInstitutionsList.push(inst);
+            const otherContainer = document.getElementById('allocationWrapperOther');
+            if (!otherContainer || otherContainer.querySelector(`.allocation-item[data-id="${inst.id}"]`)) return;
+            if (!otherContainer.querySelector('.allocation-item')) otherContainer.innerHTML = ''; // drop the "No records" note
+            const item = document.createElement('div');
+            item.className = 'allocation-item';
+            item.dataset.category = 'OTHER';
+            item.dataset.id = String(inst.id);
+            item.innerHTML = '<label class="allocation-item-label-group"><input type="checkbox" class="inst-checkbox-target"><span></span></label>'
+                + '<input type="number" class="inst-slots-target" min="0" placeholder="Cap">';
+            const checkbox = item.querySelector('.inst-checkbox-target');
+            checkbox.dataset.id = String(inst.id);
+            checkbox.dataset.currentCount = '0';
+            checkbox.checked = lastAllocationMap.length === 0;
+            item.querySelector('span').textContent = inst.name;
+            const slots = item.querySelector('.inst-slots-target');
+            slots.dataset.id = String(inst.id);
+            slots.value = 1;
+            otherContainer.appendChild(item);
+            if (document.getElementById('unlimitedSeatsToggle').checked) applyUnlimitedSeatsStateToInstitutions(true);
+        }
+
+        async function addOrganizerInstitution() {
+            const btn = document.getElementById('addOrganizerInstitutionBtn');
+            const input = document.getElementById('newOrganizerInstitutionInput');
+            if (!btn || !input || btn.disabled) return;
+            const norm = v => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const name = (input.value || '').replace(/\s+/g, ' ').trim();
+            const lower = norm(name);
+            if (!name) { alert('Please type the institution name.'); input.focus(); return; }
+            if (name.length > 150) { alert('Please use a shorter name (150 characters at most).'); return; }
+            if (lower === 'ibra' || /^ibra\s*-/.test(lower)) {
+                alert('Please add Ibra departments on the Ibra Department page, then choose "Ibra" under Organized By.');
+                return;
+            }
+            if (lower === 'other (please specify)') { alert('Please type the real name of the institution.'); return; }
+
+            const originalLabel = btn.textContent;
+            btn.disabled = true;
+            input.disabled = true;
+            btn.textContent = 'Adding…';
+            try {
+                await refreshOrganizedByOptions(); // newest list (it may have been added in another tab)
+                const ibraClash = organizedByLists.Ibra.find(n => norm(n) === lower);
+                if (ibraClash) {
+                    alert(`"${ibraClash}" is already an Ibra department. Please choose "Ibra" under Organized By instead.`);
+                    return;
+                }
+                let finalName = organizedByLists.Other.find(n => norm(n) === lower) || null;
+                const alreadyListed = !!finalName;
+                if (!alreadyListed) {
+                    const { error: insErr } = await client.from('institutions').insert({ name });
+                    // 23505 = the exact name was added meanwhile; just use it.
+                    if (insErr && insErr.code !== '23505') {
+                        alert('Could not add the institution: ' + insErr.message);
+                        return;
+                    }
+                    await refreshOrganizedByOptions();
+                    finalName = organizedByLists.Other.find(n => norm(n) === lower) || null;
+                    if (!finalName) {
+                        alert('The institution was added, but the list could not be reloaded. Please reload the page and choose it.');
+                        return;
+                    }
+                }
+
+                const typeSel = document.getElementById('courseOrganizedByType');
+                typeSel.value = 'Other';
+                fillOrganizedByDepartmentSelect();
+                document.getElementById('courseInstructorName').value = finalName;
+                input.value = '';
+
+                const { data: instRow } = await client.from('institutions').select('id, name').eq('name', finalName).maybeSingle();
+                if (instRow) addInstitutionToAllocationSection(instRow);
+
+                alert(alreadyListed
+                    ? `"${finalName}" is already in the list. It is now selected.`
+                    : `"${finalName}" was added successfully and is now selected.`);
+            } finally {
+                btn.disabled = false;
+                input.disabled = false;
+                btn.textContent = originalLabel;
+            }
+        }
+        // "?." so an older cached create-course.html (without these) can never stop the rest of this page.
+        document.getElementById('addOrganizerInstitutionBtn')?.addEventListener('click', addOrganizerInstitution);
+        // Enter in this box adds the institution - it must NOT submit (save) the whole activity form.
+        document.getElementById('newOrganizerInstitutionInput')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addOrganizerInstitution(); }
+        });
 
         // ============================================================
         // Book a Hall — multi-date entries + weekly repeat, same as the
