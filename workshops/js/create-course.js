@@ -1298,6 +1298,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     .sort((a, b) => a.localeCompare(b))
             };
             fillOrganizedByDepartmentSelect();
+            fillAllExtraOrganizerRows();
         }
         const organizedByReady = refreshOrganizedByOptions();
         document.addEventListener('visibilitychange', () => {
@@ -1344,9 +1345,23 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             if (document.getElementById('unlimitedSeatsToggle').checked) applyUnlimitedSeatsStateToInstitutions(true);
         }
 
-        async function addOrganizerInstitution() {
-            const btn = document.getElementById('addOrganizerInstitutionBtn');
-            const input = document.getElementById('newOrganizerInstitutionInput');
+        // ctx = which Organized By row the box belongs to: { btn, input, select(name) }.
+        // No ctx = the first (main) Organized By row.
+        function primaryOrganizerCtx() {
+            return {
+                btn: document.getElementById('addOrganizerInstitutionBtn'),
+                input: document.getElementById('newOrganizerInstitutionInput'),
+                select(finalName) {
+                    document.getElementById('courseOrganizedByType').value = 'Other';
+                    fillOrganizedByDepartmentSelect();
+                    document.getElementById('courseInstructorName').value = finalName;
+                }
+            };
+        }
+
+        async function addOrganizerInstitution(ctx) {
+            ctx = ctx || primaryOrganizerCtx();
+            const { btn, input } = ctx;
             if (!btn || !input || btn.disabled) return;
             const norm = v => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
             const name = (input.value || '').replace(/\s+/g, ' ').trim();
@@ -1387,10 +1402,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     }
                 }
 
-                const typeSel = document.getElementById('courseOrganizedByType');
-                typeSel.value = 'Other';
-                fillOrganizedByDepartmentSelect();
-                document.getElementById('courseInstructorName').value = finalName;
+                ctx.select(finalName);
                 input.value = '';
 
                 const { data: instRow } = await client.from('institutions').select('id, name').eq('name', finalName).maybeSingle();
@@ -1406,10 +1418,178 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
         }
         // "?." so an older cached create-course.html (without these) can never stop the rest of this page.
-        document.getElementById('addOrganizerInstitutionBtn')?.addEventListener('click', addOrganizerInstitution);
+        document.getElementById('addOrganizerInstitutionBtn')?.addEventListener('click', () => addOrganizerInstitution());
         // Enter in this box adds the institution - it must NOT submit (save) the whole activity form.
         document.getElementById('newOrganizerInstitutionInput')?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); addOrganizerInstitution(); }
+        });
+
+        // ---- Extra organizers ("+ Add another organizer") ---------------------
+        // The first Organized By row above stays exactly as it was. Each extra row
+        // has its own Ibra/Other + list (and its own "Not in the list? + Add" box).
+        // On save, all organizers are joined into courses.instructor_name as one
+        // text ("A & B", "A, B & C") - which the registration page, Activity Log
+        // page and certificates already show - and the exact list is kept in
+        // courses.organizers (sql/course-organizers.sql) so editing brings every
+        // organizer back in its own row.
+        const MAX_ORGANIZERS = 10;
+        let organizersColumnExists = false;
+        let loadedOrganizersCount = 0; // organizers saved on the activity being edited
+        const organizersColumnReady = client.from('courses').select('organizers').limit(1)
+            .then(({ error }) => { if (!error) organizersColumnExists = true; }, () => {});
+
+        function parseSavedOrganizers(raw) {
+            let list = raw;
+            try { if (typeof raw === 'string') list = JSON.parse(raw); } catch (e) { list = null; }
+            if (!Array.isArray(list)) return [];
+            return list
+                .filter(o => o && typeof o.name === 'string' && o.name.trim())
+                .map(o => ({ type: o.type === 'Ibra' || o.type === 'Other' ? o.type : '', name: o.name.trim() }));
+        }
+
+        // Finds a saved organizer in the CURRENT lists (same matching the edit page
+        // already used for the single organizer). Returns { type, name } or null.
+        function matchOrganizer(type, rawName) {
+            const stored = String(rawName || '').replace(/^Ibra - /i, '').trim().toLowerCase();
+            if (!stored) return null;
+            const order = type === 'Other' ? ['Other', 'Ibra'] : ['Ibra', 'Other'];
+            for (const t of order) {
+                const hit = (organizedByLists[t] || []).find(n => n.toLowerCase() === stored);
+                if (hit) return { type: t, name: hit };
+            }
+            return null;
+        }
+
+        function organizersDisplayText(list) {
+            const names = list.map(o => o.name);
+            if (names.length <= 1) return names[0] || '';
+            if (names.length === 2) return names.join(' & ');
+            return names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+        }
+
+        function extraOrganizerRows() {
+            return Array.from(document.querySelectorAll('#extraOrganizersList .extra-organizer-row'));
+        }
+
+        function fillExtraOrganizerRow(row) {
+            const typeSel = row.querySelector('.extra-org-type');
+            const nameSel = row.querySelector('.extra-org-name');
+            const type = typeSel.value;
+            const names = organizedByLists[type] || [];
+            const previous = nameSel.value;
+            nameSel.innerHTML = '';
+            const first = document.createElement('option');
+            first.value = '';
+            first.textContent = ORGANIZED_BY_PLACEHOLDER[type] || ORGANIZED_BY_PLACEHOLDER[''];
+            nameSel.appendChild(first);
+            names.forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n;
+                opt.textContent = n;
+                nameSel.appendChild(opt);
+            });
+            nameSel.disabled = !type;
+            if (names.includes(previous)) nameSel.value = previous;
+            row.querySelector('.extra-org-add-row').classList.toggle('hidden-element', type !== 'Other');
+        }
+
+        function fillAllExtraOrganizerRows() {
+            extraOrganizerRows().forEach(fillExtraOrganizerRow);
+        }
+
+        function renumberExtraOrganizerRows() {
+            extraOrganizerRows().forEach((row, i) => { row.querySelector('.extra-org-title').textContent = `Organizer ${i + 2}`; });
+            const addBtn = document.getElementById('addExtraOrganizerBtn');
+            if (addBtn) addBtn.disabled = extraOrganizerRows().length >= MAX_ORGANIZERS - 1;
+        }
+
+        function addExtraOrganizerRow(preset) {
+            const list = document.getElementById('extraOrganizersList');
+            if (!list) return null;
+            if (extraOrganizerRows().length >= MAX_ORGANIZERS - 1) {
+                alert(`An activity can have up to ${MAX_ORGANIZERS} organizers.`);
+                return null;
+            }
+            const row = document.createElement('div');
+            row.className = 'extra-organizer-row';
+            row.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 8px;">
+                    <span class="subsection-title extra-org-title" style="margin:0;"></span>
+                    <button type="button" class="btn-remove extra-org-remove" style="padding:6px 12px; font-weight:bold;">✕ Remove</button>
+                </div>
+                <div class="input-row">
+                    <select class="extra-org-type">
+                        <option value="">-- Organized By --</option>
+                        <option value="Ibra">Ibra</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <select class="extra-org-name" disabled></select>
+                </div>
+                <div class="input-row hidden-element extra-org-add-row" style="grid-template-columns: 1fr auto;">
+                    <input type="text" class="extra-org-new-input" maxlength="150" autocomplete="off" placeholder="Not in the list? Type the new institution">
+                    <button type="button" class="btn-action-inline extra-org-add-btn">+ Add</button>
+                </div>`;
+            list.appendChild(row);
+
+            const typeSel = row.querySelector('.extra-org-type');
+            const nameSel = row.querySelector('.extra-org-name');
+            const ctx = {
+                btn: row.querySelector('.extra-org-add-btn'),
+                input: row.querySelector('.extra-org-new-input'),
+                select(finalName) {
+                    typeSel.value = 'Other';
+                    fillExtraOrganizerRow(row);
+                    nameSel.value = finalName;
+                }
+            };
+            typeSel.addEventListener('change', () => fillExtraOrganizerRow(row));
+            row.querySelector('.extra-org-remove').addEventListener('click', () => { row.remove(); renumberExtraOrganizerRows(); });
+            ctx.btn.addEventListener('click', () => addOrganizerInstitution(ctx));
+            ctx.input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addOrganizerInstitution(ctx); }
+            });
+
+            if (preset && preset.type) typeSel.value = preset.type;
+            fillExtraOrganizerRow(row);
+            if (preset && preset.name) nameSel.value = preset.name;
+            renumberExtraOrganizerRows();
+            return row;
+        }
+
+        function clearExtraOrganizerRows() {
+            const list = document.getElementById('extraOrganizersList');
+            if (list) list.innerHTML = '';
+            renumberExtraOrganizerRows();
+        }
+
+        // The first organizer + every extra row, in order, with exact repeats
+        // dropped. Returns null (after a message) if an extra row is incomplete.
+        function collectOrganizers(firstType, firstName) {
+            const list = [{ type: firstType, name: firstName }];
+            const rows = extraOrganizerRows();
+            for (let i = 0; i < rows.length; i++) {
+                const type = rows[i].querySelector('.extra-org-type').value;
+                const nameSel = rows[i].querySelector('.extra-org-name');
+                const name = nameSel.value.trim();
+                if (!type || !name) {
+                    alert(`Please choose Ibra or Other and the department / institution for Organizer ${i + 2}, or remove that organizer.`);
+                    (type ? nameSel : rows[i].querySelector('.extra-org-type')).focus();
+                    return null;
+                }
+                list.push({ type, name });
+            }
+            const seen = new Set();
+            return list.filter(o => {
+                const key = o.type + '|' + o.name.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        }
+
+        document.getElementById('addExtraOrganizerBtn')?.addEventListener('click', () => {
+            const row = addExtraOrganizerRow();
+            if (row) row.querySelector('.extra-org-type').focus();
         });
 
         // ============================================================
@@ -1602,6 +1782,24 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 typeSel.value = ibraHit ? 'Ibra' : (otherHit ? 'Other' : '');
                 fillOrganizedByDepartmentSelect();
                 orgSel.value = ibraHit || otherHit || '';
+
+                // 2+ organizers (sql/course-organizers.sql): the exact saved list wins.
+                // Old activities (no list saved) keep the single-organizer result above.
+                if (Object.prototype.hasOwnProperty.call(course, 'organizers')) organizersColumnExists = true;
+                clearExtraOrganizerRows();
+                const savedOrganizers = parseSavedOrganizers(course.organizers);
+                loadedOrganizersCount = savedOrganizers.length;
+                if (savedOrganizers.length) {
+                    const firstHit = matchOrganizer(savedOrganizers[0].type, savedOrganizers[0].name);
+                    typeSel.value = firstHit ? firstHit.type : '';
+                    fillOrganizedByDepartmentSelect();
+                    orgSel.value = firstHit ? firstHit.name : '';
+                    savedOrganizers.slice(1).forEach(o => {
+                        // An organizer deleted from the lists since: its row comes back with
+                        // only Ibra/Other chosen, so Save asks to choose it again or remove it.
+                        addExtraOrganizerRow(matchOrganizer(o.type, o.name) || { type: o.type, name: '' });
+                    });
+                }
             }
             document.getElementById('courseParticipantCount').value = course.participant_count || '';
             document.getElementById('courseAttendanceRequired').checked = course.attendance_required !== false;
@@ -1794,12 +1992,28 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 document.getElementById('courseOrganizedByType').focus();
                 return;
             }
-            const instructor_name = document.getElementById('courseInstructorName').value.trim() || null;
+            let instructor_name = document.getElementById('courseInstructorName').value.trim() || null;
             if (!instructor_name) {
                 alert('Please choose the department / institution under "Organized By" - it is required.');
                 document.getElementById('courseInstructorName').focus();
                 return;
             }
+            // An old cached copy of this page has no organizer rows - never let it
+            // overwrite an activity that has 2+ organizers with just the first one.
+            if (!document.getElementById('extraOrganizersList') && loadedOrganizersCount > 1) {
+                alert('This page is out of date. Please press Ctrl+F5 to reload it, then save again.');
+                return;
+            }
+            const organizersList = collectOrganizers(document.getElementById('courseOrganizedByType').value, instructor_name);
+            if (!organizersList) return;
+            await organizersColumnReady;
+            if (organizersList.length > 1 && !organizersColumnExists) {
+                alert('To save more than one organizer, please run sql/course-organizers.sql in Supabase first (or remove the extra organizers).');
+                return;
+            }
+            instructor_name = organizersDisplayText(organizersList);
+            // Only sent once the column exists, so saving keeps working before the SQL is run.
+            const organizersPayload = organizersColumnExists ? { organizers: organizersList } : {};
             const participantCountRaw = document.getElementById('courseParticipantCount').value;
             const participant_count = participantCountRaw === '' ? null : parseInt(participantCountRaw, 10);
             const attendance_required = document.getElementById('courseAttendanceRequired').checked;
@@ -1922,7 +2136,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const { error: updErr } = await client.from('courses').update({
                     name, course_date, activity_end_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
                     designation_seats, theme_color, image_url, unlimited_seats, ...targetingSelections,
-                    section_pages, page_titles, ...attendanceDaysPayload
+                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload
                 }).eq('id', editingCourseId);
                 if (updErr) {
                     alert("Matrix transaction insertion execution error: " + updErr.message);
@@ -1941,7 +2155,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const { data: newCourse, error: insErr } = await client.from('courses').insert({
                     name, course_date, activity_end_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
                     designation_seats, theme_color, image_url, unlimited_seats, ...targetingSelections,
-                    section_pages, page_titles, ...attendanceDaysPayload
+                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload
                 }).select().single();
                 if (insErr) {
                     alert("Creation module error pipeline rejection: " + insErr.message);
@@ -2335,6 +2549,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const form = document.getElementById('courseConfigForm');
             form.reset();
             fillOrganizedByDepartmentSelect(); // form.reset() puts both Organized By selects back to their first option
+            clearExtraOrganizerRows();
             prefillChEntranceName(); // form.reset() blanks it; it is locked, so put the name back
             document.getElementById('courseComment').value = '';
             syncAttendanceDaysRowVisibility();
