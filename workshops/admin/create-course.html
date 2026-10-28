@@ -127,10 +127,13 @@
                                 </select>
                             </div>
 
-                            <!-- Shown only when Organized By = Other (see syncOrganizedByAddRow in js/create-course.js) -->
-                            <div class="input-row hidden-element" id="addOrganizerInstitutionRow" style="grid-template-columns: 1fr auto;">
-                                <input type="text" id="newOrganizerInstitutionInput" maxlength="150" autocomplete="off" placeholder="Not in the list? Type the new institution (e.g. Ministry of Health - Ibri)">
-                                <button type="button" id="addOrganizerInstitutionBtn" class="btn-action-inline">+ Add</button>
+                            <!-- More organizers for the same activity (see "Extra organizers" in js/create-course.js) -->
+                            <div id="extraOrganizersList"></div>
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <button type="button" id="addExtraOrganizerBtn" class="btn-action btn-add">+ Add another organizer</button>
+                                    <p class="section-hint" style="margin:8px 0 0;">Only if the activity is organized together with another department or institution. All organizers are shown together, e.g. "Pharmacy Department &amp; Al Jaza Health Center".</p>
+                                </div>
                             </div>
 
                             <div class="input-row" style="grid-template-columns: 1fr;">
@@ -403,7 +406,7 @@
 </div>
 </div>
 
-<script type="module" src="../js/create-course.js?v=18"></script>
+<script type="module" src="../js/create-course.js?v=20"></script>
 <script src="../js/sidebar.js"></script>
 <script type="module" src="../js/hall-requests-alert.js"></script>
 </body>
