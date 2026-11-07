@@ -1171,17 +1171,20 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         // Without calling this explicitly once at init too, a brand new
         // activity's institution fields never got zeroed/locked despite
         // Unlimited Seats showing checked from the very first render.
-        function applyUnlimitedSeatsStateToInstitutions(isUnlimited) {
+        // Unlimited Seats means "no seat limit" only: chairs are forced to 0
+        // (= no limit per institution) and locked, but the institution
+        // ticks stay editable — the ticked institutions decide WHO can
+        // register (saved as courses.institutions_limited when any is
+        // unticked, see sql/course-institutions-limited.sql).
+        // tickAll: tick every institution first — used when Unlimited Seats
+        // is switched on, and when opening an older Unlimited Seats activity
+        // that is open to everyone (so it shows, and saves, as everyone).
+        function applyUnlimitedSeatsStateToInstitutions(isUnlimited, { tickAll = false } = {}) {
             if (isUnlimited) {
-                // Also check every institution's own checkbox, not just
-                // zero its chair count — pushAllocationRecords() only
-                // saves a course_institutions row for CHECKED institutions,
-                // so an unchecked one (left over from before this course
-                // was made unlimited, or just never explicitly reviewed)
-                // would get no row at all and show as "CLOSED / NOT
-                // ALLOCATED" on the registration form, even with its chair
-                // field showing 0.
-                document.querySelectorAll('.inst-checkbox-target').forEach(checkbox => { checkbox.checked = true; checkbox.disabled = true; });
+                document.querySelectorAll('.inst-checkbox-target').forEach(checkbox => {
+                    if (tickAll) checkbox.checked = true;
+                    checkbox.disabled = false;
+                });
                 document.querySelectorAll('.inst-slots-target').forEach(input => {
                     input.value = 0;
                     input.disabled = true;
@@ -1206,8 +1209,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // whole activity now unlimited, every institution's field
             // is forced to 0 and locked, since any other per-institution
             // cap would be meaningless (and confusing to look at) once
-            // the activity itself has no overall limit.
-            applyUnlimitedSeatsStateToInstitutions(e.target.checked);
+            // the activity itself has no overall limit. Switching it on
+            // ticks every institution first; any can be unticked after.
+            applyUnlimitedSeatsStateToInstitutions(e.target.checked, { tickAll: e.target.checked });
         });
 
         document.getElementById('bookHallToggle').addEventListener('change', (e) => {
@@ -1314,6 +1318,13 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         let loadedOrganizersCount = 0; // organizers saved on the activity being edited
         const organizersColumnReady = client.from('courses').select('organizers').limit(1)
             .then(({ error }) => { if (!error) organizersColumnExists = true; }, () => {});
+
+        // courses.institutions_limited (sql/course-institutions-limited.sql) -
+        // only sent once the column exists, so saving keeps working before
+        // that SQL is run.
+        let institutionsLimitedColumnExists = false;
+        const institutionsLimitedColumnReady = client.from('courses').select('institutions_limited').limit(1)
+            .then(({ error }) => { if (!error) institutionsLimitedColumnExists = true; }, () => {});
 
         function parseSavedOrganizers(raw) {
             let list = raw;
@@ -1754,7 +1765,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
             const { data: mappingAllocations } = await client.from('course_institutions').select('*').eq('course_id', editingCourseId);
             renderAllocationMappingFramework(mappingAllocations || []);
-            applyUnlimitedSeatsStateToInstitutions(isUnlimited);
+            // An Unlimited Seats activity shows its saved ticks only when it
+            // is limited to them; an older one open to everyone shows (and
+            // stays) everything ticked, exactly as before.
+            if (Object.prototype.hasOwnProperty.call(course, 'institutions_limited')) institutionsLimitedColumnExists = true;
+            applyUnlimitedSeatsStateToInstitutions(isUnlimited, { tickAll: isUnlimited && course.institutions_limited !== true });
             // Pre-open the section when editing a course that already has
             // allocations set — otherwise it stays collapsed like new.
             const hasExistingAllocations = (mappingAllocations || []).length > 0;
@@ -1873,6 +1888,18 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             instructor_name = organizersDisplayText(organizersList);
             // Only sent once the column exists, so saving keeps working before the SQL is run.
             const organizersPayload = organizersColumnExists ? { organizers: organizersList } : {};
+            // Institutional Allocations: limited when some institutions are
+            // unticked (matters for Unlimited Seats activities - see
+            // applyUnlimitedSeatsStateToInstitutions). None ticked = open to all.
+            const institutionCheckboxes = Array.from(document.querySelectorAll('.inst-checkbox-target'));
+            const tickedInstitutionCount = institutionCheckboxes.filter(cb => cb.checked).length;
+            const institutions_limited = tickedInstitutionCount > 0 && tickedInstitutionCount < institutionCheckboxes.length;
+            await institutionsLimitedColumnReady;
+            if (unlimited_seats && institutions_limited && !institutionsLimitedColumnExists) {
+                alert('To limit an Unlimited Seats activity to the ticked institutions, please run sql/course-institutions-limited.sql in Supabase first (or tick all institutions).');
+                return;
+            }
+            const institutionsLimitedPayload = institutionsLimitedColumnExists ? { institutions_limited } : {};
             const participantCountRaw = document.getElementById('courseParticipantCount').value;
             const participant_count = participantCountRaw === '' ? null : parseInt(participantCountRaw, 10);
             const attendance_required = document.getElementById('courseAttendanceRequired').checked;
@@ -1995,7 +2022,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const { error: updErr } = await client.from('courses').update({
                     name, course_date, activity_end_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
                     designation_seats, theme_color, image_url, unlimited_seats, ...targetingSelections,
-                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload
+                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload, ...institutionsLimitedPayload
                 }).eq('id', editingCourseId);
                 if (updErr) {
                     alert("Matrix transaction insertion execution error: " + updErr.message);
@@ -2014,7 +2041,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const { data: newCourse, error: insErr } = await client.from('courses').insert({
                     name, course_date, activity_end_date, seats, required_files, file_labels, file_examples, allowed_sex, allowed_designations, instructor_name, participant_count, attendance_required, activity_type, course_end_date, registration_opens_date, description,
                     designation_seats, theme_color, image_url, unlimited_seats, ...targetingSelections,
-                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload
+                    section_pages, page_titles, ...attendanceDaysPayload, ...organizersPayload, ...institutionsLimitedPayload
                 }).select().single();
                 if (insErr) {
                     alert("Creation module error pipeline rejection: " + insErr.message);
