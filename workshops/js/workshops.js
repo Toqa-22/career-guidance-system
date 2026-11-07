@@ -2776,13 +2776,23 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 await client.from('institutions').insert(masterInstitutionsAndDepartments.map(name => ({ name })));
             }
 
+            // Only the linked activity's rows: this page never shows any other
+            // activity. Loading EVERY activity's rows ran into the server's
+            // 1,000-rows-per-request limit, so a newer activity's chair-mapping
+            // rows could be cut off and it then looked open to every institution.
+            const linkedCourseIds = courses.map(c => c.id);
+            const noRows = Promise.resolve({ data: [], error: null });
             const [{ data: maps, error: mapErr }, { data: registers, error: regErr }, { data: institutionsData, error: instErr }] = await Promise.all([
-                client.from('course_institutions').select('*, institutions(name)'),
+                linkedCourseIds.length
+                    ? client.from('course_institutions').select('*, institutions(name)').in('course_id', linkedCourseIds)
+                    : noRows,
                 // Reads the safe public view (course_id, institution_name_snapshot,
                 // designation_category_snapshot only) — the base registrations
                 // table itself is admin-only under RLS, since it holds phone
                 // numbers and names.
-                client.from('public_registration_counts').select('course_id, institution_name_snapshot, designation_category_snapshot'),
+                linkedCourseIds.length
+                    ? client.from('public_registration_counts').select('course_id, institution_name_snapshot, designation_category_snapshot').in('course_id', linkedCourseIds)
+                    : noRows,
                 // The two dropdowns below used to be a hardcoded JS array and a
                 // static list of <option> tags respectively — meaning an
                 // institution added anywhere in the admin (hub or Create
