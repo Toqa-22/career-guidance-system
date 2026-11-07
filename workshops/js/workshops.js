@@ -878,6 +878,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             return countInstitutionRegistrations(courseId, name) >= cap;
         }
 
+        // Unlimited Seats used to mean "every institution can register". Now
+        // it only means "no seat limit": an Unlimited Seats activity saved
+        // with some institutions unticked (courses.institutions_limited, see
+        // sql/course-institutions-limited.sql) is limited to the ticked ones.
+        // Older Unlimited Seats activities (false / no column yet) stay open
+        // to everyone, as before.
+        function unlimitedAndOpenToAll(course) {
+            return !!(course && course.unlimited_seats && course.institutions_limited !== true);
+        }
+
         function getEligibilityRules(course, courseId) {
             const rules = { sex: null, designations: null, designationCaps: {}, mappings: [], institutionRestricted: false, targeting: [], neededKeys: [] };
             if (!course) return rules;
@@ -886,9 +896,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             rules.designationCaps = parseDesignationCaps(course);
             rules.mappings = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
             // Same rule as the institution dropdowns and the submit check:
-            // restricted only when some institutions are ticked and the
-            // activity is not Unlimited Seats.
-            rules.institutionRestricted = !course.unlimited_seats && rules.mappings.length > 0;
+            // restricted when some institutions are ticked, unless the
+            // activity is Unlimited Seats AND open to everyone.
+            rules.institutionRestricted = !unlimitedAndOpenToAll(course) && rules.mappings.length > 0;
             PERSON_TARGETING_FIELDS.forEach(field => {
                 const list = restrictedRuleList(course[field.key]);
                 if (list) rules.targeting.push({ field, list });
@@ -1824,7 +1834,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             // rule filterIbraDepartments/filterOtherInstitutions and the
             // registration-time eligibility check already use.
             const noMappingConfigured = mappingsForCourse.length === 0;
-            const isOpen = noMappingConfigured || !!(course && course.unlimited_seats);
+            const isOpen = noMappingConfigured || unlimitedAndOpenToAll(course);
 
             let optionsHtml = '<option value="">-- Choose Institution Option --</option>';
             if (hasIbra || isOpen) optionsHtml += '<option value="Ibra">Ibra hospital</option>';
@@ -1988,7 +1998,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                             chairsLeftStr = ` (${chairsLeft} chairs remaining)`;
                             if (chairsLeft <= 0) isFull = true;
                         }
-                    } else if (course && (course.unlimited_seats || courseHasNoMappingConfigured)) {
+                    } else if (course && (unlimitedAndOpenToAll(course) || courseHasNoMappingConfigured)) {
                         // No allocation row at all for this institution on
                         // this specific course. Treated as OPEN (no cap)
                         // when either the course itself is unlimited-seats,
@@ -2054,7 +2064,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                             label = `${opt.value} (${chairsLeft} chairs remaining)`;
                             if (chairsLeft <= 0) isFull = true;
                         }
-                    } else if (course && (course.unlimited_seats || courseHasNoMappingConfigured)) {
+                    } else if (course && (unlimitedAndOpenToAll(course) || courseHasNoMappingConfigured)) {
                         // No allocation row at all for this institution on
                         // this course, but the course is either
                         // unlimited-seats or has no institution restriction
@@ -3179,7 +3189,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
                 const courseHasNoMappingConfigured = mappingsForCourse.length === 0;
 
-                if (!allocationConfig && !courseHasNoMappingConfigured && !(currentCourse && currentCourse.unlimited_seats)) {
+                if (!allocationConfig && !courseHasNoMappingConfigured && !unlimitedAndOpenToAll(currentCourse)) {
                     throw new Error("This institution/department is not authorized or assigned slots for this specific course framework.");
                 }
 
