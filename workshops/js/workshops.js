@@ -7,6 +7,10 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         let courseInstitutionsMapCached = [];
         let registrationLogsCached = [];
         let institutionsByNameCached = new Map();
+        // Every "Other hospital and health center" name (catch-all excluded),
+        // kept unfiltered: the eligibility questions must offer ALL of them,
+        // while filterOtherInstitutions trims the form's own dropdown per activity.
+        let otherInstitutionNamesAll = [];
 
         const departmentsList = [
             "Emergency Department Doctor", "Emergency Department Nurse", "Internal Medicine Department", "General Surgery Department",
@@ -760,66 +764,630 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             }
         }
 
+        // message: a plain string, or { reasons: [...], footer } to list
+        // every reason at once (see runEligibilityStage). null hides it.
         function setNotEligibleNotice(message) {
             const box = document.getElementById('notEligibleNotice');
-            box.textContent = message || '';
-            box.classList.toggle('hidden-element', !message);
-            document.getElementById('closeNotEligibleBtn').classList.toggle('hidden-element', !message);
+            const isList = !!message && typeof message === 'object' && Array.isArray(message.reasons);
+            const show = isList ? message.reasons.length > 0 : !!message;
+            box.textContent = '';
+            if (isList && show) {
+                const title = document.createElement('span');
+                title.style.cssText = 'display:block; font-weight:800; margin-bottom:8px;';
+                title.textContent = "Sorry, you can't register for this activity:";
+                box.appendChild(title);
+                const list = document.createElement('ul');
+                list.style.cssText = 'margin:0 0 10px; padding-left:20px; display:flex; flex-direction:column; gap:6px;';
+                message.reasons.forEach(reason => {
+                    const item = document.createElement('li');
+                    item.textContent = reason;
+                    list.appendChild(item);
+                });
+                box.appendChild(list);
+                if (message.footer) {
+                    const footer = document.createElement('span');
+                    footer.style.cssText = 'display:block; font-size:13px;';
+                    footer.textContent = message.footer;
+                    box.appendChild(footer);
+                }
+            } else if (!isList) {
+                box.textContent = message || '';
+            }
+            box.classList.toggle('hidden-element', !show);
+            document.getElementById('closeNotEligibleBtn').classList.toggle('hidden-element', !show);
         }
 
-        // Checks a RETURNING participant's own saved profile against this
-        // course's eligibility rules — a brand-new (unmatched) staff number
-        // has nothing saved to conflict with yet, so this only ever runs
-        // for a match. Course-specific answers (the 8 targeting fields,
-        // designation, institution) are only a real restriction when the
-        // course actually narrows them — an untouched "All"/empty value
-        // means anyone qualifies, so those are skipped rather than flagged.
-        function getEligibilityBlockReason(participant, course, courseId) {
-            // Every sibling helper that takes a possibly-missing course
-            // guards this the same way (getSectionPages, filterIbraDepartments,
-            // etc.) — this one didn't, so a course that went missing from
-            // coursesCached between render and this call would throw here
-            // instead of just treating it as "nothing to check yet".
-            if (!course) return null;
-            if (course.allowed_sex === 'Male' && participant.sex && participant.sex !== 'Male') {
-                return 'This activity is open to Male participants only, and your saved profile has you as Female.';
-            }
-            if (course.allowed_sex === 'Female' && participant.sex && participant.sex !== 'Female') {
-                return 'This activity is open to Female participants only, and your saved profile has you as Male.';
-            }
+        // ====================================================================
+        // Eligibility check — runs BEFORE the registration form opens, for
+        // every staff number (new or returning). Only what the activity
+        // actually restricts is checked:
+        //   - Gender (allowed_sex Male / Female)
+        //   - Designation (allowed_designations) and its designation seats
+        //   - Institution / department (course_institutions rows, unless the
+        //     activity is Unlimited Seats) and that department's chairs
+        //   - Job Level, Nationality, Qualification, Experience Years,
+        //     Organization, Directorate — only when narrowed (not "All")
+        //   - Seats left in the activity itself
+        // Type of Program / Nature of Attendance describe the activity, not
+        // the person, so they are never an eligibility rule.
+        // Answers come from a returning participant's current-year profile;
+        // anything missing is asked in the "Before you register" box
+        // (#eligibilityCheckBox). Every failed rule is listed together in
+        // #notEligibleNotice and the form stays closed. Answers that pass are
+        // filled into the form and locked (applyEligibilityAnswersToForm).
+        // The same rules are checked again at submit (handleSubmitInner) and
+        // by the database itself (sql/submit-registration.sql).
+        // An activity with no restriction at all skips all of this.
+        // ====================================================================
+        const PERSON_TARGETING_FIELDS = TARGETING_FIELDS.filter(f => !PER_ACTIVITY_TARGETING_KEYS.includes(f.key));
+        const ELIGIBILITY_STORAGE_PREFIX = 'ibraEligibility:';
+        let eligibilityGiven = null;   // { storageKey, values } — answers typed in the box for this activity + staff number
+        let eligibilityPrefill = null; // the previous answers, shown again after "Change my answers"
 
-            if (course.allowed_designations) {
-                let list;
-                try {
-                    list = Array.isArray(course.allowed_designations) ? course.allowed_designations : JSON.parse(course.allowed_designations);
-                } catch (e) { list = null; }
-                if (Array.isArray(list) && list.length > 0 && !list.includes('All') && participant.designation_category && !list.includes(participant.designation_category)) {
-                    return `This activity is limited to specific designations, and your saved designation (${participant.designation_category}) isn't one of them.`;
+        function escapeHtmlText(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // A rule list (allowed_designations, or one targeting field) is a
+        // real restriction only when it is a non-empty list without "All".
+        // Returns that list, or null when anyone qualifies.
+        function restrictedRuleList(raw) {
+            let list = raw;
+            try {
+                if (typeof raw === 'string') list = raw.trim() === '' ? [] : JSON.parse(raw);
+            } catch (e) { list = null; }
+            if (!Array.isArray(list) || list.length === 0 || list.includes('All')) return null;
+            return list.map(String);
+        }
+
+        // { "Nurses": 5, ... } — only real caps (> 0); a missing key is no cap.
+        function parseDesignationCaps(course) {
+            let raw = {};
+            try {
+                const v = course ? course.designation_seats : null;
+                raw = v ? (typeof v === 'string' ? JSON.parse(v) : v) : {};
+            } catch (e) { raw = {}; }
+            const caps = {};
+            if (raw && typeof raw === 'object') {
+                Object.keys(raw).forEach(k => {
+                    const n = Number(raw[k]);
+                    if (n > 0) caps[k] = n;
+                });
+            }
+            return caps;
+        }
+
+        // Same counting rules as the dropdowns (filterIbraDepartments /
+        // filterOtherInstitutions / updateDesignationOptionsForCourse).
+        function countDesignationRegistrations(courseId, category) {
+            return registrationLogsCached.filter(r => r.course_id === courseId && r.designation_category_snapshot === category).length;
+        }
+        function countInstitutionRegistrations(courseId, name) {
+            return registrationLogsCached.filter(r => r.course_id === courseId && r.institution_name_snapshot &&
+                (name === OTHER_CATCHALL_NAME
+                    ? r.institution_name_snapshot.startsWith(OTHER_CATCHALL_NAME)
+                    : r.institution_name_snapshot === name)).length;
+        }
+        // max_slots = 0 means unlimited for that institution.
+        function isAllocationFull(allocation, courseId) {
+            const cap = Number(allocation.max_slots);
+            const name = allocation.institutions && allocation.institutions.name;
+            if (!(cap > 0) || !name) return false;
+            return countInstitutionRegistrations(courseId, name) >= cap;
+        }
+
+        function getEligibilityRules(course, courseId) {
+            const rules = { sex: null, designations: null, designationCaps: {}, mappings: [], institutionRestricted: false, targeting: [], neededKeys: [] };
+            if (!course) return rules;
+            if (course.allowed_sex === 'Male' || course.allowed_sex === 'Female') rules.sex = course.allowed_sex;
+            rules.designations = restrictedRuleList(course.allowed_designations);
+            rules.designationCaps = parseDesignationCaps(course);
+            rules.mappings = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
+            // Same rule as the institution dropdowns and the submit check:
+            // restricted only when some institutions are ticked and the
+            // activity is not Unlimited Seats.
+            rules.institutionRestricted = !course.unlimited_seats && rules.mappings.length > 0;
+            PERSON_TARGETING_FIELDS.forEach(field => {
+                const list = restrictedRuleList(course[field.key]);
+                if (list) rules.targeting.push({ field, list });
+            });
+
+            // Which answers are needed: every narrowed rule, plus designation /
+            // institution whenever one of their seat caps is already full (the
+            // answer then decides whether this person still has a seat).
+            const designationFull = Object.keys(rules.designationCaps).some(d => countDesignationRegistrations(courseId, d) >= rules.designationCaps[d]);
+            const institutionFull = rules.mappings.some(m => isAllocationFull(m, courseId));
+            if (rules.sex) rules.neededKeys.push('sex');
+            if (rules.designations || designationFull) rules.neededKeys.push('designation_category');
+            if (rules.institutionRestricted || institutionFull) rules.neededKeys.push('institution');
+            rules.targeting.forEach(t => rules.neededKeys.push(t.field.key));
+            return rules;
+        }
+
+        // { type: 'Ibra'|'Other', name: allocation lookup name, id, label: what was saved }
+        function institutionAnswerFromProfile(p) {
+            let saved = String(p.institution_name || '').trim();
+            if (!saved && p.institution_id != null) {
+                for (const [n, id] of institutionsByNameCached) {
+                    if (String(id) === String(p.institution_id)) { saved = n; break; }
                 }
             }
+            if (!saved) return null;
+            const name = saved.startsWith(OTHER_CATCHALL_NAME) ? OTHER_CATCHALL_NAME : saved;
+            return { type: name.startsWith('Ibra - ') ? 'Ibra' : 'Other', name, id: p.institution_id != null ? p.institution_id : null, label: saved };
+        }
 
-            const mappingsForCourse = courseInstitutionsMapCached.filter(m => m.course_id === courseId);
-            if (mappingsForCourse.length > 0 && participant.institution_id && !course.unlimited_seats) {
-                const isAllowed = mappingsForCourse.some(m => m.institution_id === participant.institution_id);
-                if (!isAllowed) {
-                    return 'This activity is limited to specific institutions/departments, and your saved institution isn\'t one of them.';
-                }
+        // Only a profile confirmed for THIS year counts (same rule as the
+        // prefill/lock); an older one is asked again, like the form itself.
+        function eligibilityAnswersFromProfile(p) {
+            const out = {};
+            if (!p || !isProfileCurrentForThisYear(p)) return out;
+            if (p.sex) out.sex = String(p.sex);
+            if (p.designation_category) out.designation_category = String(p.designation_category);
+            const inst = institutionAnswerFromProfile(p);
+            if (inst) out.institution = inst;
+            PERSON_TARGETING_FIELDS.forEach(f => { if (p[f.key]) out[f.key] = String(p[f.key]); });
+            return out;
+        }
+
+        function hasEligibilityAnswer(v) {
+            if (v && typeof v === 'object') return !!v.name;
+            return typeof v === 'string' && v.trim() !== '';
+        }
+
+        // Matches an institution answer to this activity's allocation row: by
+        // name, or by the saved id only when that saved name no longer exists
+        // at all (the institution was renamed since).
+        function findAllocationForInstitution(mappings, inst) {
+            if (!inst) return null;
+            const byName = mappings.find(m => m.institutions && m.institutions.name === inst.name);
+            if (byName) return byName;
+            if (inst.id != null && !institutionsByNameCached.has(inst.name)) {
+                return mappings.find(m => String(m.institution_id) === String(inst.id) && m.institutions && m.institutions.name) || null;
             }
-
-            for (const field of TARGETING_FIELDS) {
-                let list;
-                try {
-                    const raw = course[field.key];
-                    list = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim() !== '' ? JSON.parse(raw) : []);
-                } catch (e) { list = []; }
-                if (list.length === 0 || list.includes('All')) continue;
-                const participantValue = participant[field.key];
-                if (participantValue && !list.includes(participantValue)) {
-                    return `This activity requires a specific ${field.label}, and your saved ${field.label} (${participantValue}) doesn't match.`;
-                }
-            }
-
             return null;
+        }
+
+        function institutionAnswerLabel(inst) {
+            const n = inst.label || inst.name;
+            return n.startsWith('Ibra - ') ? `${n.slice('Ibra - '.length)}, Ibra Hospital` : n;
+        }
+
+        function describeAllowedInstitutions(mappings) {
+            const names = mappings.map(m => m.institutions && m.institutions.name).filter(Boolean);
+            const ibra = names.filter(n => n.startsWith('Ibra - '));
+            const other = names.filter(n => !n.startsWith('Ibra - '));
+            if (names.length > 0 && names.length <= 5) {
+                return `This activity is only for: ${names.map(n => n.startsWith('Ibra - ') ? `${n.slice('Ibra - '.length)} (Ibra Hospital)` : n).join(', ')}.`;
+            }
+            if (ibra.length > 0 && other.length === 0) {
+                const everyDept = departmentsList.length > 0 && departmentsList.every(d => ibra.includes('Ibra - ' + d));
+                return everyDept ? 'This activity is only for Ibra Hospital staff.' : 'This activity is only for some Ibra Hospital departments.';
+            }
+            if (other.length > 0 && ibra.length === 0) {
+                const everyOther = otherInstitutionNamesAll.every(n => other.includes(n)) && other.includes(OTHER_CATCHALL_NAME);
+                return everyOther ? 'This activity is only for hospitals and health centers outside Ibra Hospital.' : 'This activity is only for some hospitals and health centers.';
+            }
+            return 'This activity is only for some departments and institutions.';
+        }
+
+        // Returns [{ key, text }] — every rule the answers break. Answers that
+        // are missing are skipped (the caller asks for them first).
+        // options.checkSeats = false skips the "seats taken" checks (the
+        // submit step checks those live itself).
+        function evaluateEligibility(course, courseId, answers, options) {
+            const checkSeats = !(options && options.checkSeats === false);
+            const problems = [];
+            if (!course) return problems;
+            const rules = (options && options.rules) || getEligibilityRules(course, courseId);
+            const add = (key, text) => problems.push({ key, text });
+            const shortList = list => (list.length <= 6 ? list.join(', ') : null);
+
+            if (rules.sex && answers.sex && answers.sex !== rules.sex) {
+                add('sex', `This activity is for ${rules.sex} participants only.`);
+            }
+
+            const designation = answers.designation_category;
+            if (designation) {
+                if (rules.designations && !rules.designations.includes(designation)) {
+                    const shown = shortList(rules.designations);
+                    add('designation_category', shown
+                        ? `This activity is only for these designations: ${shown}. Your designation (${designation}) is not one of them.`
+                        : `Your designation (${designation}) is not included in this activity.`);
+                } else if (checkSeats && rules.designationCaps[designation] &&
+                           countDesignationRegistrations(courseId, designation) >= rules.designationCaps[designation]) {
+                    add('designation_category', `All seats for ${designation} are taken.`);
+                }
+            }
+
+            const inst = answers.institution;
+            if (hasEligibilityAnswer(inst)) {
+                const kind = inst.type === 'Ibra' ? 'department' : 'institution';
+                const allocation = findAllocationForInstitution(rules.mappings, inst);
+                if (rules.institutionRestricted && !allocation) {
+                    add('institution', `${describeAllowedInstitutions(rules.mappings)} Your ${kind} (${institutionAnswerLabel(inst)}) is not one of them.`);
+                } else if (checkSeats && allocation && isAllocationFull(allocation, courseId)) {
+                    add('institution', `All seats for your ${kind} (${institutionAnswerLabel(inst)}) are taken.`);
+                }
+            }
+
+            rules.targeting.forEach(({ field, list }) => {
+                const value = answers[field.key];
+                if (!value || list.includes(String(value))) return;
+                const shown = shortList(list);
+                add(field.key, shown
+                    ? `This activity is only for ${field.label}: ${shown}. Yours (${value}) is not one of them.`
+                    : `Your ${field.label} (${value}) is not included in this activity.`);
+            });
+
+            return problems;
+        }
+
+        // Fresh counts for THIS activity (the page-load ones can be minutes
+        // old) and its fresh seat count. Failures keep the page-load numbers.
+        async function refreshEligibilityData(courseId) {
+            let freshSeats = null;
+            try {
+                const [counts, seatRow] = await Promise.all([
+                    client.from('public_registration_counts')
+                        .select('course_id, institution_name_snapshot, designation_category_snapshot')
+                        .eq('course_id', courseId),
+                    client.from('courses').select('seats, unlimited_seats').eq('id', courseId).maybeSingle()
+                ]);
+                if (counts && !counts.error && Array.isArray(counts.data)) {
+                    registrationLogsCached = registrationLogsCached.filter(r => r.course_id !== courseId).concat(counts.data);
+                }
+                if (seatRow && !seatRow.error && seatRow.data) freshSeats = seatRow.data;
+            } catch (e) {
+                console.error('Could not refresh seat counts before the eligibility check:', e);
+            }
+            return freshSeats;
+        }
+
+        // ---- Answers typed in the box: kept for this tab only (so coming back
+        // from a required exam doesn't ask again), cleared on "Change staff
+        // number" and after registering.
+        function eligibilityStorageKey(courseId) {
+            const staff = matchedParticipant ? matchedParticipant.staff_number : enteredStaffNumberRaw;
+            return `${ELIGIBILITY_STORAGE_PREFIX}${courseId}:${normalizeStaffNumber(staff)}`;
+        }
+
+        // Keeps only values that are real options today.
+        function sanitizeEligibilityValues(raw) {
+            const out = {};
+            if (!raw || typeof raw !== 'object') return out;
+            if (raw.sex === 'Male' || raw.sex === 'Female') out.sex = raw.sex;
+            if (DESIGNATION_OPTIONS.includes(raw.designation_category)) out.designation_category = raw.designation_category;
+            const inst = raw.institution;
+            if (inst && typeof inst === 'object' && typeof inst.name === 'string') {
+                const okIbra = inst.type === 'Ibra' && inst.name.startsWith('Ibra - ') && departmentsList.includes(inst.name.slice('Ibra - '.length));
+                const okOther = inst.type === 'Other' && (inst.name === OTHER_CATCHALL_NAME || otherInstitutionNamesAll.includes(inst.name));
+                if (okIbra || okOther) out.institution = { type: inst.type, name: inst.name };
+            }
+            PERSON_TARGETING_FIELDS.forEach(f => {
+                if (f.options.includes(raw[f.key])) out[f.key] = raw[f.key];
+            });
+            return out;
+        }
+
+        function loadEligibilityAnswers(storageKey) {
+            if (eligibilityGiven && eligibilityGiven.storageKey === storageKey) return eligibilityGiven.values;
+            let values = {};
+            try {
+                const raw = sessionStorage.getItem(storageKey);
+                if (raw) values = sanitizeEligibilityValues(JSON.parse(raw));
+            } catch (e) { values = {}; }
+            eligibilityGiven = { storageKey, values };
+            return values;
+        }
+
+        function saveEligibilityAnswers(storageKey, values) {
+            const clean = sanitizeEligibilityValues(values);
+            eligibilityGiven = { storageKey, values: clean };
+            try { sessionStorage.setItem(storageKey, JSON.stringify(clean)); } catch (e) { /* this tab only */ }
+        }
+
+        function clearEligibilityAnswers() {
+            eligibilityGiven = null;
+            try {
+                for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                    const k = sessionStorage.key(i);
+                    if (k && k.startsWith(ELIGIBILITY_STORAGE_PREFIX)) sessionStorage.removeItem(k);
+                }
+            } catch (e) { /* nothing stored */ }
+        }
+
+        // ---- The "Before you register" box ---------------------------------
+        function getEligibilityBox() {
+            let box = document.getElementById('eligibilityCheckBox');
+            if (box) return box;
+            // An older cached register.html has no placeholder — build it in
+            // the same spot (right after the not-eligible notice).
+            const notice = document.getElementById('notEligibleNotice');
+            const holder = notice ? notice.parentElement : null;
+            if (!holder || !holder.parentNode) return null;
+            box = document.createElement('div');
+            box.id = 'eligibilityCheckBox';
+            box.className = 'form-group-full hidden-element';
+            holder.parentNode.insertBefore(box, holder.nextSibling);
+            return box;
+        }
+
+        function hideEligibilityBox() {
+            const box = document.getElementById('eligibilityCheckBox');
+            if (!box) return;
+            box.classList.add('hidden-element');
+            box.innerHTML = '';
+        }
+
+        function eligibilityKeyLabel(key) {
+            if (key === 'sex') return 'Gender';
+            if (key === 'designation_category') return 'Designation';
+            if (key === 'institution') return 'Institution';
+            const field = PERSON_TARGETING_FIELDS.find(f => f.key === key);
+            return field ? field.label : key;
+        }
+
+        function eligibilitySelectHtml(id, label, options, current, hidden) {
+            const opt = (value, text) => `<option value="${escapeHtmlText(value)}"${value === current ? ' selected' : ''}>${escapeHtmlText(text)}</option>`;
+            return `
+                <div id="${id}_wrap" class="${hidden ? 'hidden-element' : ''}" style="display:flex; flex-direction:column; gap:6px;">
+                    <label for="${id}">${escapeHtmlText(label)}</label>
+                    <select id="${id}">${opt('', '-- Choose --')}${options.map(o => opt(o.value, o.text)).join('')}</select>
+                </div>`;
+        }
+
+        function eligibilityQuestionHtml(key, prefill) {
+            const plain = list => list.map(v => ({ value: v, text: v }));
+            if (key === 'sex') {
+                return eligibilitySelectHtml('eligQ_sex', 'Gender', plain(['Male', 'Female']), prefill.sex || '');
+            }
+            if (key === 'designation_category') {
+                return eligibilitySelectHtml('eligQ_designation_category', 'Designation', plain(DESIGNATION_OPTIONS), prefill.designation_category || '');
+            }
+            if (key === 'institution') {
+                const inst = prefill.institution || null;
+                const type = inst ? inst.type : '';
+                const dept = inst && inst.type === 'Ibra' ? inst.name.slice('Ibra - '.length) : '';
+                const other = inst && inst.type === 'Other' ? inst.name : '';
+                return eligibilitySelectHtml('eligQ_instType', 'Institution',
+                        [{ value: 'Ibra', text: 'Ibra hospital' }, { value: 'Other', text: 'Other hospital and health center' }], type) +
+                    eligibilitySelectHtml('eligQ_dept', 'Department', plain(departmentsList), dept, type !== 'Ibra') +
+                    eligibilitySelectHtml('eligQ_other', 'Institution name', plain([...otherInstitutionNamesAll, OTHER_CATCHALL_NAME]), other, type !== 'Other');
+            }
+            const field = PERSON_TARGETING_FIELDS.find(f => f.key === key);
+            return field ? eligibilitySelectHtml('eligQ_' + key, field.label, plain(field.options), prefill[key] || '') : '';
+        }
+
+        function readEligibilityBox(keys) {
+            const values = {};
+            const missing = [];
+            const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+            keys.forEach(key => {
+                if (key === 'institution') {
+                    const type = val('eligQ_instType');
+                    if (!type) { missing.push('Institution'); return; }
+                    if (type === 'Ibra') {
+                        const dept = val('eligQ_dept');
+                        if (!dept) missing.push('Department');
+                        else values.institution = { type, name: 'Ibra - ' + dept };
+                    } else {
+                        const other = val('eligQ_other');
+                        if (!other) missing.push('Institution name');
+                        else values.institution = { type, name: other };
+                    }
+                    return;
+                }
+                const v = val('eligQ_' + key);
+                if (!v) missing.push(eligibilityKeyLabel(key));
+                else values[key] = v;
+            });
+            return { values, missing };
+        }
+
+        function showEligibilityQuestions(keys, prefill, onContinue) {
+            const box = getEligibilityBox();
+            if (!box) return false;
+            box.style.cssText = 'padding:16px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; gap:12px;';
+            box.innerHTML = `
+                <div>
+                    <p style="margin:0 0 4px; font-weight:800; font-size:15px; color:#1E3A8A;">Before you register</p>
+                    <p style="margin:0; font-size:13px; font-weight:600; color:#1E40AF; line-height:1.5;">This activity is only for some participants. Please answer these questions so we can check that you can join.</p>
+                </div>
+                ${keys.map(k => eligibilityQuestionHtml(k, prefill)).join('')}
+                <div><button type="button" class="btn-register" id="eligibilityContinueBtn" style="width:auto; padding:10px 26px;">Continue</button></div>`;
+            box.classList.remove('hidden-element');
+
+            const typeSelect = document.getElementById('eligQ_instType');
+            if (typeSelect) {
+                typeSelect.addEventListener('change', () => {
+                    document.getElementById('eligQ_dept_wrap').classList.toggle('hidden-element', typeSelect.value !== 'Ibra');
+                    document.getElementById('eligQ_other_wrap').classList.toggle('hidden-element', typeSelect.value !== 'Other');
+                });
+            }
+            const btn = document.getElementById('eligibilityContinueBtn');
+            btn.addEventListener('click', async () => {
+                if (btn.disabled) return;
+                const { values, missing } = readEligibilityBox(keys);
+                if (missing.length > 0) {
+                    alert(`Please answer: ${missing.join(', ')}.`);
+                    return;
+                }
+                btn.disabled = true;
+                btn.textContent = 'Checking…';
+                try {
+                    await onContinue(values);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Continue';
+                }
+            });
+            return true;
+        }
+
+        function showEligibilityPassed(onChange) {
+            const box = getEligibilityBox();
+            if (!box) return;
+            box.style.cssText = 'flex-direction:row; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:12px 14px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px;';
+            box.innerHTML = `
+                <span style="font-weight:700; color:#166534;">✓ Your answers meet this activity's requirements.</span>
+                <button type="button" id="eligibilityChangeBtn" style="background:none; border:none; color:#64748b; text-decoration:underline; cursor:pointer; font-size:13px; font-weight:600; padding:0;">Change my answers</button>`;
+            box.classList.remove('hidden-element');
+            document.getElementById('eligibilityChangeBtn').addEventListener('click', onChange);
+        }
+
+        // Closes everything below the notices while the box or the
+        // not-eligible message is showing. The three containers, the two
+        // profile notices and the custom questions heading are not part of
+        // toggleFormVisibility, so they are closed here too (matters when
+        // "Change my answers" re-runs this after the form was already open).
+        function closeFormForEligibility() {
+            toggleFormVisibility(false);
+            ['departmentContainer', 'otherInstitutionContainer', 'firstLogEntryContainer', 'lockedProfileNotice', 'profileRefreshNotice'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden-element');
+            });
+            document.getElementById('customQuestionsContainer').innerHTML = '';
+            customQuestionsCache = [];
+        }
+
+        // Returns { ok, answers, keys, rules }. ok = false means the form must
+        // stay closed (the box or the not-eligible message is showing).
+        async function runEligibilityStage(course, courseId) {
+            if (!course) return { ok: true, answers: {}, keys: [], rules: null };
+            const staffKeyAtStart = eligibilityStorageKey(courseId);
+            const freshSeats = await refreshEligibilityData(courseId);
+            // "Not you? Change staff number" was pressed while loading — this
+            // run is for the old staff number, so it must not show anything.
+            if (eligibilityStorageKey(courseId) !== staffKeyAtStart) return { ok: false };
+            const rules = getEligibilityRules(course, courseId);
+            const seatsGone = !!freshSeats && !freshSeats.unlimited_seats && Number(freshSeats.seats) <= 0;
+
+            if (rules.neededKeys.length === 0 && !seatsGone) {
+                hideEligibilityBox();
+                return { ok: true, answers: {}, keys: [], rules };
+            }
+
+            const fromProfile = eligibilityAnswersFromProfile(matchedParticipant);
+            const storageKey = eligibilityStorageKey(courseId);
+            const given = loadEligibilityAnswers(storageKey);
+            const answers = {};
+            const profileKeys = [];
+            const askKeys = [];
+            rules.neededKeys.forEach(key => {
+                if (hasEligibilityAnswer(fromProfile[key])) { answers[key] = fromProfile[key]; profileKeys.push(key); }
+                else if (hasEligibilityAnswer(given[key])) answers[key] = given[key];
+                else askKeys.push(key);
+            });
+
+            // No questions when the activity is already full anyway.
+            if (askKeys.length > 0 && !seatsGone) {
+                const shown = showEligibilityQuestions(askKeys, sanitizeEligibilityValues(eligibilityPrefill), async (newValues) => {
+                    saveEligibilityAnswers(storageKey, { ...given, ...newValues });
+                    eligibilityPrefill = null;
+                    await handleCourseSelectionChange();
+                });
+                if (!shown) setNotEligibleNotice('Please reload this page and try again.');
+                closeFormForEligibility();
+                return { ok: false };
+            }
+            eligibilityPrefill = null;
+
+            const problems = evaluateEligibility(course, courseId, answers, { rules });
+            if (seatsGone) problems.unshift({ key: 'seats', text: 'All seats for this activity are taken.' });
+            if (problems.length > 0) {
+                hideEligibilityBox();
+                const usedProfile = problems.some(p => profileKeys.includes(p.key));
+                setNotEligibleNotice({
+                    reasons: problems.map(p => p.text),
+                    footer: usedProfile
+                        ? 'These checks used your saved profile. If something in it is wrong, please contact the Professional Development Department.'
+                        : 'If you think this is a mistake, please contact the Professional Development Department.'
+                });
+                closeFormForEligibility();
+                return { ok: false };
+            }
+
+            const typedKeys = rules.neededKeys.filter(k => !profileKeys.includes(k));
+            if (typedKeys.length > 0) {
+                showEligibilityPassed(() => {
+                    eligibilityPrefill = { ...given };
+                    clearEligibilityAnswers();
+                    handleCourseSelectionChange();
+                });
+            } else {
+                hideEligibilityBox();
+            }
+            return { ok: true, answers, keys: rules.neededKeys, rules };
+        }
+
+        // ---- After the form is built: put the checked answers into it and
+        // lock them, so the registration matches what was checked. A value
+        // the form doesn't offer is left open instead (never a locked blank).
+        function selectOffers(select, value) {
+            return !!select && Array.from(select.options).some(o => o.value === value && !o.disabled);
+        }
+
+        function applyInstitutionAnswerToForm(inst, rules, courseId) {
+            const allocation = rules ? findAllocationForInstitution(rules.mappings, inst) : null;
+            const name = allocation ? allocation.institutions.name : inst.name;
+            const type = name.startsWith('Ibra - ') ? 'Ibra' : 'Other';
+            const typeSelect = document.getElementById('institutionTypeSelect');
+            if (!selectOffers(typeSelect, type)) return;
+            if (typeSelect.value !== type) {
+                typeSelect.value = type;
+                renderInstitutionFields();
+            }
+            let applied = false;
+            if (type === 'Ibra') {
+                const deptSelect = document.getElementById('departmentSelect');
+                const dept = name.slice('Ibra - '.length);
+                if (deptSelect.value !== dept && selectOffers(deptSelect, dept)) deptSelect.value = dept;
+                applied = deptSelect.value === dept;
+                if (applied) deptSelect.disabled = true;
+            } else {
+                const otherSelect = document.getElementById('otherInstitutionInput');
+                if (otherSelect.value !== name && selectOffers(otherSelect, name)) {
+                    otherSelect.value = name;
+                    handleOtherInstitutionChange();
+                }
+                applied = otherSelect.value === name;
+                if (applied) otherSelect.disabled = true;
+            }
+            if (applied) typeSelect.disabled = true;
+
+            // renderInstitutionFields() shows the Department / Institution box
+            // straight away — keep it hidden when the "department" field is
+            // set to a page that isn't the one on screen.
+            const course = coursesCached.find(c => c.id === courseId);
+            const onDeptPage = (getSectionPages(course).department || 1) === (regPages.length ? regPages[regPageIndex] : 1);
+            if (!onDeptPage) {
+                document.getElementById('departmentContainer').classList.add('hidden-element');
+                document.getElementById('otherInstitutionContainer').classList.add('hidden-element');
+            }
+        }
+
+        function applyEligibilityAnswersToForm(result, courseId) {
+            if (!result || !result.ok || !result.keys || result.keys.length === 0) return;
+            result.keys.forEach(key => {
+                const value = result.answers[key];
+                if (!hasEligibilityAnswer(value)) return;
+                if (key === 'institution') {
+                    applyInstitutionAnswerToForm(value, result.rules, courseId);
+                    return;
+                }
+                const select = document.getElementById(
+                    key === 'sex' ? 'sexSelect' : key === 'designation_category' ? 'designationSelect' : 'reg_' + key);
+                if (!select) return;
+                if (select.value !== value) {
+                    if (!selectOffers(select, value)) return;
+                    select.value = value;
+                    if (key === 'designation_category') handleDesignationChange();
+                }
+                select.disabled = true;
+            });
         }
 
         function resetStaffGate() {
@@ -834,6 +1402,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             setAlreadyRegisteredNoticeVisible(false);
             setNotEligibleNotice(null);
             setExamRequiredNotice(null);
+            hideEligibilityBox();
+            clearEligibilityAnswers();
+            eligibilityPrefill = null;
             // A direct activity link locks the dropdown to one course (see
             // applyDirectCourseLinkFromUrl) — that choice isn't the
             // participant's to change, so it's left alone here; only the
@@ -1757,6 +2328,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             setAlreadyRegisteredNoticeVisible(false);
             setNotEligibleNotice(null);
             setExamRequiredNotice(null);
+            hideEligibilityBox();
 
             if (isClosed) {
                 // These three aren't part of REST_OF_FORM_IDS (toggled by
@@ -1807,20 +2379,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     toggleFormVisibility(false);
                     return;
                 }
-
-                // Their own saved profile might rule them out of THIS
-                // specific course even though they're not already
-                // registered for it — e.g. a course open to Female
-                // participants only, and this staff number's saved sex is
-                // Male. A brand-new (unmatched) staff number has nothing
-                // saved to conflict with, so this only ever applies here.
-                const blockReason = getEligibilityBlockReason(matchedParticipant, selectedCourse, courseId);
-                if (blockReason) {
-                    setNotEligibleNotice(blockReason);
-                    toggleFormVisibility(false);
-                    return;
-                }
             }
+
+            // Eligibility — for EVERY staff number, new or returning: checks
+            // all of this activity's rules (gender, designation, institution /
+            // department, the person targeting fields, and seats) before the
+            // form opens. Asks in the "Before you register" box whatever the
+            // saved profile can't answer, and lists every failed rule at once.
+            // See runEligibilityStage.
+            const eligibility = await runEligibilityStage(selectedCourse, courseId);
+            if (!eligibility.ok) return;
 
             // ================================================================
             // Exam gate — added for the separate Exam feature (see
@@ -2015,6 +2583,11 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 unlockProfileFields();
                 if (matchedParticipant) showProfileRefreshNotice();
             }
+
+            // Last: the answers the eligibility check accepted go into the
+            // form and are locked (after the lock/unlock above, which would
+            // otherwise re-open them).
+            applyEligibilityAnswersToForm(eligibility, courseId);
         }
 
         function updateSelectableCoursesOptions() {
@@ -2249,6 +2822,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         // the institutions table, keeping the free-text catch-all option that
         // isn't a real row in that table.
         function populateOtherInstitutionOptions(names) {
+            otherInstitutionNamesAll = names.slice();
             const dropdown = document.getElementById('otherInstitutionInput');
             const currentSelected = dropdown.value;
             let html = '<option value="">-- Choose Corporate / Academic Entity --</option>';
@@ -2549,6 +3123,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                     institutionSnapshotString = otherText;
                     allocationLookupName = otherText;
                 }
+            }
+
+            // Same rules as the check before the form opened
+            // (evaluateEligibility), run once more on exactly what is being
+            // submitted. Seat limits are checked live further down, and by
+            // the database.
+            const eligibilityProblems = evaluateEligibility(coursesCached.find(c => c.id === courseId), courseId, {
+                sex: sexValue,
+                designation_category: designationCategory,
+                institution: { type: instType, name: allocationLookupName, label: institutionSnapshotString },
+                ...Object.fromEntries(PERSON_TARGETING_FIELDS.map(f => [f.key, targetingValues[f.key]]))
+            }, { checkSeats: false });
+            if (eligibilityProblems.length > 0) {
+                alert(`You can't register for this activity. ${eligibilityProblems.map(p => p.text).join(' ')}`);
+                return;
             }
 
             // Final backstop covering every page, same reasoning as the
