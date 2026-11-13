@@ -1278,6 +1278,225 @@ window.generateCoursesPerDepartmentPdf = async function () {
 };
 
 // ============================================================================
+// Courses per Organizing Department (PDF) — same look as "Activity log:
+// Courses per Department" above, but counts the ACTIVITIES made in Create
+// Activity by their "Organized By":
+//   - courses.organizers (sql/course-organizers.sql) = [{ type: 'Ibra' |
+//     'Other', name }]: an activity with two organizers counts once for each.
+//   - Organized By = None is saved as organizers = [] with no instructor_name:
+//     counted for no department (shown as a line in the header instead).
+//   - Older activities without the list only have instructor_name: matched to
+//     an Ibra department / other institution by name, otherwise listed under
+//     the name exactly as it was typed, so nothing is silently left out.
+// From/To filter on the activity's own date (course_date). Every Ibra
+// department is listed (0 included), like the report above; other
+// institutions and old typed names only when they organized something.
+// ============================================================================
+async function populateOrganizerDepartmentSelect() {
+    const el = document.getElementById('orgDeptChartDepartment');
+    if (!el) return;
+    try {
+        const { data, error } = await client.from('institutions').select('name');
+        if (error || !data) return;
+        const names = data.map(i => (i.name || '').trim()).filter(Boolean);
+        const ibra = names.filter(n => n.startsWith('Ibra - ')).sort((a, b) => a.localeCompare(b));
+        const other = names.filter(n => !n.startsWith('Ibra - ') && n !== 'Other (Please Specify)').sort((a, b) => a.localeCompare(b));
+        const previous = el.value;
+        el.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = '';
+        all.textContent = 'All departments';
+        el.appendChild(all);
+        [['Ibra departments', ibra], ['Other hospitals / health centers', other]].forEach(([label, list]) => {
+            if (list.length === 0) return;
+            const group = document.createElement('optgroup');
+            group.label = label;
+            list.forEach(n => {
+                const o = document.createElement('option');
+                o.value = n; // "Ibra - X" for a department, the plain name otherwise
+                o.textContent = n.replace('Ibra - ', '');
+                group.appendChild(o);
+            });
+            el.appendChild(group);
+        });
+        if ([...ibra, ...other].includes(previous)) el.value = previous;
+    } catch (e) {
+        console.error('Could not load the organizer department list:', e);
+    }
+}
+populateOrganizerDepartmentSelect();
+
+// Every activity (paged past the 1,000-rows-per-request limit). Falls back to
+// no organizers list when sql/course-organizers.sql has not been run.
+async function fetchAllCoursesWithOrganizers() {
+    const PAGE_SIZE = 1000;
+    const pull = async (columns) => {
+        let rows = [];
+        let from = 0;
+        while (true) {
+            const { data, error } = await client.from('courses').select(columns)
+                .order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1);
+            if (error) return { data: null, error };
+            if (!data || data.length === 0) break;
+            rows = rows.concat(data);
+            if (data.length < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+        }
+        return { data: rows, error: null };
+    };
+    const withList = await pull('id, name, course_date, instructor_name, organizers');
+    if (!withList.error) return withList;
+    return pull('id, name, course_date, instructor_name');
+}
+
+window.generateCoursesPerOrganizerPdf = async function () {
+    const note = document.getElementById('orgDeptChartNote');
+    note.textContent = 'Building report...';
+    const fromStr = document.getElementById('orgDeptChartFrom').value;
+    const toStr = document.getElementById('orgDeptChartTo').value;
+
+    try {
+        const [{ data: courses, error: courseErr }, { data: allInsts, error: instErr }] = await Promise.all([
+            fetchAllCoursesWithOrganizers(),
+            client.from('institutions').select('name')
+        ]);
+        if (courseErr) throw courseErr;
+        if (instErr) throw instErr;
+
+        const instNames = (allInsts || []).map(i => (i.name || '').trim()).filter(Boolean);
+        const ibraDepts = instNames.filter(n => n.startsWith('Ibra - ')).map(n => n.replace('Ibra - ', '').trim());
+        const otherInsts = instNames.filter(n => !n.startsWith('Ibra - ') && n !== 'Other (Please Specify)');
+        if (ibraDepts.length === 0) {
+            note.textContent = 'No Ibra departments exist yet.';
+            return;
+        }
+        const findCI = (list, name) => list.find(n => n.toLowerCase() === String(name || '').trim().toLowerCase());
+
+        // One organizer -> its row: { key, label }. Ibra departments and other
+        // institutions use their CURRENT spelling when they still exist.
+        const organizerRow = (type, rawName) => {
+            const name = String(rawName || '').replace(/^Ibra - /i, '').trim();
+            if (!name) return null;
+            const ibraHit = type !== 'Other' ? findCI(ibraDepts, name) : undefined;
+            if (ibraHit) return { key: 'Ibra|' + ibraHit, label: ibraHit };
+            const otherHit = type !== 'Ibra' ? findCI(otherInsts, name) : undefined;
+            if (otherHit) return { key: 'Other|' + otherHit, label: otherHit };
+            if (type === 'Ibra') return { key: 'Ibra|' + name, label: name };   // department deleted since
+            if (type === 'Other') return { key: 'Other|' + name, label: name };
+            return { key: 'Typed|' + name.toLowerCase(), label: name };            // old free-text organizer
+        };
+
+        const inPeriod = (courses || []).filter(c => !(fromStr || toStr) || isWithinRange(c.course_date, fromStr, toStr));
+        const countByKey = new Map();
+        const labelByKey = new Map();
+        let noOrganizerCount = 0;
+        inPeriod.forEach(c => {
+            let list = c.organizers;
+            try { if (typeof list === 'string') list = JSON.parse(list); } catch (e) { list = null; }
+            let rowsForCourse = [];
+            if (Array.isArray(list) && list.length > 0) {
+                rowsForCourse = list.map(o => o && organizerRow(o.type, o.name)).filter(Boolean);
+            } else if (String(c.instructor_name || '').trim()) {
+                const r = organizerRow('', c.instructor_name);
+                if (r) rowsForCourse = [r];
+            }
+            if (rowsForCourse.length === 0) { noOrganizerCount++; return; }
+            // The same organizer listed twice on one activity still counts once.
+            new Set(rowsForCourse.map(r => r.key)).forEach(key => {
+                countByKey.set(key, (countByKey.get(key) || 0) + 1);
+            });
+            rowsForCourse.forEach(r => labelByKey.set(r.key, r.label));
+        });
+
+        const allRows = ibraDepts.map(d => ({ key: 'Ibra|' + d, dept: d, count: countByKey.get('Ibra|' + d) || 0 }));
+        countByKey.forEach((count, key) => {
+            if (!key.startsWith('Ibra|') || !ibraDepts.includes(key.slice(5))) {
+                allRows.push({ key, dept: labelByKey.get(key) || key.split('|')[1], count });
+            }
+        });
+        allRows.sort((a, b) => b.count - a.count || a.dept.localeCompare(b.dept));
+
+        // Department chooser: '' = all, "Ibra - X" = that department, otherwise
+        // that other institution.
+        const chosen = (document.getElementById('orgDeptChartDepartment') || {}).value || '';
+        const chosenKey = chosen ? (chosen.startsWith('Ibra - ') ? 'Ibra|' + chosen.replace('Ibra - ', '') : 'Other|' + chosen) : '';
+        let rows = allRows;
+        if (chosenKey) {
+            rows = allRows.filter(r => r.key === chosenKey);
+            if (rows.length === 0 && chosenKey.startsWith('Other|') && otherInsts.includes(chosen)) {
+                rows = [{ key: chosenKey, dept: chosen, count: 0 }]; // organized nothing in this period
+            }
+        }
+        if (rows.length === 0) {
+            note.textContent = 'That department no longer exists — please choose another one.';
+            return;
+        }
+
+        const canvas = document.getElementById('orgDeptChartOffscreen');
+        const existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: rows.map(r => r.dept),
+                datasets: [{ label: 'Courses Organized', data: rows.map(r => r.count), backgroundColor: '#7C3AED' }]
+            },
+            options: {
+                responsive: false, animation: false,
+                plugins: { legend: { display: false }, title: { display: true, text: 'Courses Organized per Department' } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } },
+                    x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 60 } }
+                }
+            }
+        });
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const chartImage = canvas.toDataURL('image/png');
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const logo = await getLogoBase64().catch(() => null);
+        const generatedLine = [`Generated: ${new Date().toLocaleString()}`];
+        if (fromStr || toStr) generatedLine.push(`Period: ${fromStr ? formatDateDDMMYYYY(fromStr) : 'Start'} – ${toStr ? formatDateDDMMYYYY(toStr) : 'Present'}`);
+        if (chosen) generatedLine.push(`Department: ${chosen.replace('Ibra - ', '')}`); // drawReportHeader reshapes info lines itself
+        if (!chosen && noOrganizerCount > 0) {
+            generatedLine.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
+        }
+
+        const imageY = drawReportHeader(doc, logo, 'Courses per Organizing Department Report', generatedLine);
+        doc.addImage(chartImage, 'PNG', 14, imageY, 182, 101);
+
+        const totalCourses = rows.reduce((sum, r) => sum + r.count, 0);
+        doc.autoTable({
+            startY: imageY + 101 + 10,
+            head: [['#', 'Department', 'Number of Courses']],
+            body: rows.map((r, i) => [i + 1, reshapeArabicForPdf(r.dept), String(r.count)]),
+            theme: 'grid',
+            styles: { font: 'Amiri' },
+            headStyles: { fillColor: [124, 58, 237], font: 'Amiri' },
+            bodyStyles: { font: 'Amiri' },
+            foot: [[{ content: 'Total', colSpan: 2, styles: { fontStyle: 'bold', font: 'Amiri' } }, { content: String(totalCourses), styles: { fontStyle: 'bold', font: 'Amiri' } }]],
+            footStyles: { fillColor: [237, 233, 254], textColor: [91, 33, 182], font: 'Amiri' },
+            showFoot: 'lastPage',
+            didDrawPage: (data) => { if (data.pageNumber > 1) drawMinimalReportHeader(doc, logo); },
+            margin: { left: 14, right: 14, top: 66 }
+        });
+
+        addPrintedByFooter(doc);
+        const blobUrl = doc.output('bloburl');
+        const previewTab = window.open(blobUrl, '_blank');
+        if (!previewTab) {
+            note.innerHTML = `Your browser blocked the preview pop-up — <a href="${blobUrl}" target="_blank" rel="noopener">click here to open the report</a>.`;
+        } else {
+            note.textContent = '';
+        }
+    } catch (err) {
+        console.error('Courses per organizing department PDF failed:', err);
+        note.textContent = 'Something went wrong: ' + err.message;
+    }
+};
+
+// ============================================================================
 // Evaluation / Exam Report (PDF) — pick one evaluation/exam, get a chart per
 // question (shaped to that question's own type) followed by a full table of
 // every submitted answer. Mirrors the data-loading shape already used by
