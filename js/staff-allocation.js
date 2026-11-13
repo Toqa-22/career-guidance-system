@@ -36,7 +36,7 @@ async function load() {
 
     if (regErr || instErr || courseErr) {
         document.getElementById('staffAllocBody').innerHTML =
-            `<tr class="admin-empty-row"><td colspan="7" style="color:#b91c1c;">Could not load data: ${(regErr || instErr || courseErr).message} — try reloading the page.</td></tr>`;
+            `<tr class="admin-empty-row"><td colspan="8" style="color:#b91c1c;">Could not load data: ${(regErr || instErr || courseErr).message} — try reloading the page.</td></tr>`;
         document.getElementById('staffAllocTable').classList.remove('hidden-element');
         return;
     }
@@ -128,8 +128,11 @@ function renderTable(groups) {
     const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
     if (currentPage > totalPages) currentPage = totalPages;
     const pageGroups = groups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    // Row numbers continue across pages (page 2 starts at 11) and follow the
+    // current search/filter — the printed list uses the same numbers.
+    const firstRowNumber = (currentPage - 1) * PAGE_SIZE + 1;
 
-    tbody.innerHTML = pageGroups.map(g => {
+    tbody.innerHTML = pageGroups.map((g, rowIndex) => {
         const parts = g.registrations.map(r => splitInstitutionSnapshot(r.institution_name_snapshot));
         const institutionsText = [...new Set(parts.map(p => p.institution))].join(', ');
         const deptBadges = [...new Set(parts.map(p => p.department))].map(d => `<span class="dept-badge">${escapeHtml(d)}</span>`).join('');
@@ -144,6 +147,7 @@ function renderTable(groups) {
 
         return `
         <tr data-staff-key="${staffKey}">
+            <td class="row-num-cell">${firstRowNumber + rowIndex}</td>
             <td>${escapeHtml(g.staff_name || '—')}</td>
             <td>${escapeHtml(g.staff_number || '—')}</td>
             <td>${escapeHtml(g.phone_number || '—')}</td>
@@ -409,5 +413,120 @@ document.getElementById('staffAllocDepartmentFilter').addEventListener('change',
     currentPage = 1;
     applyFilter();
 });
+
+// ---- Print ------------------------------------------------------------------
+// Prints EVERY participant matching the current search/filters (all pages,
+// not only the 10 on screen), numbered the same as the table, without the
+// "Change" column. Same approach as Training's report printing
+// (training/js/report.js): a hidden container added to this page plus
+// print-only CSS, removed again after printing. No new window - printing a
+// separate window failed on some phone browsers.
+function filterSummaryText() {
+    const q = document.getElementById('staffAllocSearch').value.trim();
+    const inst = document.getElementById('staffAllocInstitutionFilter');
+    const dept = document.getElementById('staffAllocDepartmentFilter');
+    const parts = [];
+    if (inst.value) parts.push(`Institution: ${inst.options[inst.selectedIndex].text}`);
+    if (dept.value) parts.push(`Department: ${dept.options[dept.selectedIndex].text}`);
+    if (q) parts.push(`Search: "${q}"`);
+    return parts.length ? parts.join('  ·  ') : 'All participants (no filter)';
+}
+
+function printFilteredList() {
+    const groups = currentFilteredGroups;
+    if (!groups || groups.length === 0) {
+        alert('Nothing to print — no participants match the current search/filter.');
+        return;
+    }
+
+    const originalTitle = document.title;
+    const printedAt = new Date();
+    const rowsHtml = groups.map((g, i) => {
+        const parts = g.registrations.map(r => splitInstitutionSnapshot(r.institution_name_snapshot));
+        const institutionsText = [...new Set(parts.map(p => p.institution))].join(', ');
+        const departments = [...new Set(parts.map(p => p.department))].map(d => `<div>${escapeHtml(d)}</div>`).join('');
+        const courses = g.registrations
+            .map(r => `<div>${escapeHtml(courseNamesById.get(r.course_id) || 'Deleted Activity')} — ${r.attended ? 'Attended' : 'Registered'}</div>`)
+            .join('');
+        return `<tr>
+            <td class="sa-num">${i + 1}</td>
+            <td>${escapeHtml(g.staff_name || '—')}</td>
+            <td>${escapeHtml(g.staff_number || '—')}</td>
+            <td>${escapeHtml(g.phone_number || '—')}</td>
+            <td>${escapeHtml(institutionsText || '—')}</td>
+            <td>${departments || '—'}</td>
+            <td>${courses || '—'}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('staffAllocPrintArea')?.remove();
+    document.getElementById('staffAllocPrintStyle')?.remove();
+
+    const styleEl = document.createElement('style');
+    styleEl.id = 'staffAllocPrintStyle';
+    styleEl.textContent = `
+        #staffAllocPrintArea { display: none; }
+        @page { size: A4 landscape; margin: 12mm; }
+        @media print {
+            body > *:not(#staffAllocPrintArea) { display: none !important; }
+            body { background: #fff !important; margin: 0 !important; }
+            #staffAllocPrintArea { display: block !important; font-family: Manrope, Arial, sans-serif; color: #0f172a; }
+            #staffAllocPrintArea .sa-org { font-size: 11px; color: #64748b; margin: 0 0 2px; }
+            #staffAllocPrintArea h1 { font-size: 18px; margin: 0 0 4px; }
+            #staffAllocPrintArea .sa-meta { font-size: 11px; color: #334155; margin: 0 0 10px; }
+            #staffAllocPrintArea table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            #staffAllocPrintArea th, #staffAllocPrintArea td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: left; vertical-align: top; }
+            #staffAllocPrintArea tbody tr, #staffAllocPrintArea td { background: #fff !important; }
+            #staffAllocPrintArea th { background: #f1f5f9; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            #staffAllocPrintArea thead { display: table-header-group; }
+            #staffAllocPrintArea tr { break-inside: avoid; page-break-inside: avoid; }
+            #staffAllocPrintArea .sa-num { width: 28px; color: #64748b; font-weight: 700; }
+        }
+    `;
+    document.head.appendChild(styleEl);
+
+    const container = document.createElement('div');
+    container.id = 'staffAllocPrintArea';
+    container.innerHTML = `
+        <p class="sa-org">Ibra Hospital — Professional Development and Career Guidance</p>
+        <h1>Staff Allocation</h1>
+        <p class="sa-meta">${escapeHtml(filterSummaryText())}  ·  ${groups.length} participant${groups.length === 1 ? '' : 's'}  ·  Printed ${escapeHtml(printedAt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}</p>
+        <table>
+            <thead><tr>
+                <th>#</th><th>Participant Name</th><th>Staff Number</th><th>Phone Number</th>
+                <th>Institution</th><th>Department</th><th>Courses</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>`;
+    document.body.appendChild(container);
+    // Suggested file name when saving as PDF.
+    document.title = `Staff Allocation - ${printedAt.toISOString().slice(0, 10)}`;
+
+    let cleaned = false;
+    let safetyTimer = null;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        window.removeEventListener('afterprint', cleanup);
+        window.removeEventListener('focus', cleanup);
+        if (safetyTimer) clearTimeout(safetyTimer);
+        container.remove();
+        styleEl.remove();
+        document.title = originalTitle;
+    };
+    window.addEventListener('afterprint', cleanup);
+    safetyTimer = setTimeout(cleanup, 120000);
+    try {
+        window.print();
+    } catch (err) {
+        console.error('Print failed:', err);
+        cleanup();
+        alert('Could not open printing on this device.');
+        return;
+    }
+    setTimeout(() => window.addEventListener('focus', cleanup), 400);
+}
+
+document.getElementById('staffAllocPrintBtn').addEventListener('click', printFilteredList);
 
 load();
