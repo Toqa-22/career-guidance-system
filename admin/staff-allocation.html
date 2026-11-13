@@ -25,6 +25,40 @@
    that stacked layout too, so it's dropped once cards take over. */
 @media (max-width: 720px) {
     #staffAllocTable { min-width: 0 !important; }
+    /* Stacked cards: show the row number as "#3" on its own line. */
+    #staffAllocTable td.row-num-cell::before { content: '#'; }
+    #staffAllocTable thead { display: none; }
+}
+#staffAllocTable td.row-num-cell { color: #64748b; font-weight: 700; white-space: nowrap; }
+
+/* Screen sizes:
+   - Desktop: the table's box is at most 888px wide (admin card), so the
+     fixed 900px minimum width cut off the "Change" column a little. The
+     table now fits its box; the scroll wrapper stays only as a safety net.
+   - Whenever the table's own box is narrower than the 8 columns need
+     (tablets, small laptops, or the side menu open), the table had to be
+     swiped sideways to see Courses / Change. It now switches to the same
+     one-card-per-person layout as phones (same rules as admin-pages.css
+     uses below 720px). Decided by the BOX width (container query), not
+     the screen width, because the side menu can be open or closed at the
+     same screen width. Older browsers without container queries keep the
+     table, scrolling inside its box as before.
+   - Very small phones: the search box (220px minimum) and the Change box
+     (190px minimum) were wider than the card; they now shrink to fit. */
+#staffAllocTable { min-width: 0 !important; }
+#staffAllocTableWrap { container-type: inline-size; }
+@container (max-width: 879px) {
+    #staffAllocTable, #staffAllocTable thead, #staffAllocTable tbody, #staffAllocTable th, #staffAllocTable td, #staffAllocTable tr { display: block; }
+    #staffAllocTable th { display: none; }
+    #staffAllocTable tr { margin-bottom: 12px; border: 1px solid #f1f5f9; border-radius: 10px; padding: 8px; }
+    /* The header row would otherwise show as an empty bordered card. */
+    #staffAllocTable thead { display: none; }
+    #staffAllocTable td.row-num-cell::before { content: '#'; }
+    #staffAllocTable .reassign-cell { min-width: 0; }
+    #staffAllocTable .reassign-cell select { max-width: 100%; box-sizing: border-box; }
+}
+@media (max-width: 720px) {
+    #staffAllocSearch { min-width: 0 !important; flex-basis: 100% !important; }
 }
 </style>
 </head>
@@ -85,12 +119,15 @@
             <select id="staffAllocDepartmentFilter" style="flex:1; min-width:160px;">
                 <option value="">All Departments</option>
             </select>
+            <!-- Prints every participant matching the search/filters above (all pages) -->
+            <button type="button" id="staffAllocPrintBtn" class="admin-btn admin-btn-secondary no-print" style="flex:0 0 auto;">🖨 Print</button>
         </div>
         <p id="staffAllocEmpty" class="fix-institutions-empty hidden-element">No participants found.</p>
-        <div style="overflow-x: auto; max-width: 100%;">
+        <div id="staffAllocTableWrap" style="overflow-x: auto; max-width: 100%;">
         <table class="admin-table hidden-element" id="staffAllocTable" style="min-width: 900px;">
             <thead>
                 <tr>
+                    <th style="width:44px;">#</th>
                     <th>Participant Name</th>
                     <th>Staff Number</th>
                     <th>Phone Number</th>
@@ -101,7 +138,7 @@
                 </tr>
             </thead>
             <tbody id="staffAllocBody">
-                <tr class="admin-empty-row"><td colspan="7">Loading…</td></tr>
+                <tr class="admin-empty-row"><td colspan="8">Loading…</td></tr>
             </tbody>
         </table>
         </div>
@@ -114,7 +151,7 @@
 </div>
 
 <script src="../js/sidebar.js"></script>
-<script type="module" src="../js/staff-allocation.js?v=6"></script>
+<script type="module" src="../js/staff-allocation.js?v=7"></script>
 
 </body>
 </html>
