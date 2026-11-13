@@ -1286,8 +1286,7 @@ window.generateCoursesPerDepartmentPdf = async function () {
 //     - Organized By = None (organizers = [] and no instructor_name): counted
 //       for no department (shown as a line in the header instead).
 //     - Older activities without the list only have instructor_name: matched
-//       to an Ibra department / other institution by name, otherwise listed
-//       under the name exactly as typed, so nothing is silently left out.
+//       to an Ibra department / other institution by name.
 //     - "Without attendance" activities (attendance_required = false) are the
 //       Activity Log containers: NOT counted here, their real courses are the
 //       log entries below (otherwise they would count twice).
@@ -1296,8 +1295,11 @@ window.generateCoursesPerDepartmentPdf = async function () {
 //     rules as the "Activity log: Courses per Department" report
 //     (countActivityLogCoursesPerDept): one department + one date = one course.
 //   Total = Organized + Activity Log.
-// Every Ibra department is listed (0 included); other institutions and old
-// typed names only when they have something.
+// Only departments / institutions that exist TODAY (the institutions table)
+// are shown, like the report above: every Ibra department (0 included), other
+// institutions when they have something. Anything else - a department the
+// admin deleted (e.g. "MOH staff"), or an old typed organizer name that is no
+// department - is left out, and the header says how many were left out.
 // ============================================================================
 async function populateOrganizerDepartmentSelect() {
     const el = document.getElementById('orgDeptChartDepartment');
@@ -1424,8 +1426,9 @@ window.generateCoursesPerOrganizerPdf = async function () {
         }
         const findCI = (list, name) => list.find(n => n.toLowerCase() === String(name || '').trim().toLowerCase());
 
-        // One organizer -> its row: { key, label }. Ibra departments and other
-        // institutions use their CURRENT spelling when they still exist.
+        // One organizer -> its row: { key, label } using the CURRENT spelling,
+        // or { removed: true } when it is not a department / institution that
+        // exists today (deleted since, or an old typed name).
         const organizerRow = (type, rawName) => {
             const name = String(rawName || '').replace(/^Ibra - /i, '').trim();
             if (!name) return null;
@@ -1433,14 +1436,13 @@ window.generateCoursesPerOrganizerPdf = async function () {
             if (ibraHit) return { key: 'Ibra|' + ibraHit, label: ibraHit };
             const otherHit = type !== 'Ibra' ? findCI(otherInsts, name) : undefined;
             if (otherHit) return { key: 'Other|' + otherHit, label: otherHit };
-            if (type === 'Ibra') return { key: 'Ibra|' + name, label: name };   // department deleted since
-            if (type === 'Other') return { key: 'Other|' + name, label: name };
-            return { key: 'Typed|' + name.toLowerCase(), label: name };            // old free-text organizer
+            return { removed: true, name: name.toLowerCase() };
         };
 
         const organizedByKey = new Map();
         const labelByKey = new Map();
         let noOrganizerCount = 0;
+        let notShownCount = 0; // organizers / log departments not in today's list
         (courses || [])
             .filter(c => c.attendance_required !== false) // Activity Log containers: counted through their entries
             .filter(c => !(fromStr || toStr) || isWithinRange(c.course_date, fromStr, toStr))
@@ -1455,6 +1457,9 @@ window.generateCoursesPerOrganizerPdf = async function () {
                     if (r) rowsForCourse = [r];
                 }
                 if (rowsForCourse.length === 0) { noOrganizerCount++; return; }
+                notShownCount += new Set(rowsForCourse.filter(r => r.removed).map(r => r.name)).size;
+                rowsForCourse = rowsForCourse.filter(r => !r.removed);
+                if (rowsForCourse.length === 0) return;
                 // The same organizer listed twice on one activity still counts once.
                 new Set(rowsForCourse.map(r => r.key)).forEach(key => {
                     organizedByKey.set(key, (organizedByKey.get(key) || 0) + 1);
@@ -1462,13 +1467,14 @@ window.generateCoursesPerOrganizerPdf = async function () {
                 rowsForCourse.forEach(r => labelByKey.set(r.key, r.label));
             });
 
-        // Activity Log departments -> the same keys (current spelling when the
-        // department still exists).
+        // Activity Log departments -> the same keys (current spelling). A
+        // department deleted since is left out, like in the report above.
         const loggedByKey = new Map();
         logCountByDept.forEach((count, dept) => {
             const name = String(dept).replace(/^Ibra - /i, '').trim();
             if (!name) return;
-            const hit = findCI(ibraDepts, name) || name;
+            const hit = findCI(ibraDepts, name);
+            if (!hit) { notShownCount += count; return; }
             const key = 'Ibra|' + hit;
             loggedByKey.set(key, (loggedByKey.get(key) || 0) + count);
             if (!labelByKey.has(key)) labelByKey.set(key, hit);
@@ -1538,6 +1544,9 @@ window.generateCoursesPerOrganizerPdf = async function () {
         generatedLine.push('Activity Log = courses logged in the Activity Log');
         if (!chosen && noOrganizerCount > 0) {
             generatedLine.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
+        }
+        if (!chosen && notShownCount > 0) {
+            generatedLine.push(`Not shown: ${notShownCount} from departments / institutions no longer in the list (deleted)`);
         }
 
         const imageY = drawReportHeader(doc, logo, 'Activities per Department Report', generatedLine);
