@@ -1278,19 +1278,26 @@ window.generateCoursesPerDepartmentPdf = async function () {
 };
 
 // ============================================================================
-// Courses per Organizing Department (PDF) — same look as "Activity log:
-// Courses per Department" above, but counts the ACTIVITIES made in Create
-// Activity by their "Organized By":
-//   - courses.organizers (sql/course-organizers.sql) = [{ type: 'Ibra' |
-//     'Other', name }]: an activity with two organizers counts once for each.
-//   - Organized By = None is saved as organizers = [] with no instructor_name:
-//     counted for no department (shown as a line in the header instead).
-//   - Older activities without the list only have instructor_name: matched to
-//     an Ibra department / other institution by name, otherwise listed under
-//     the name exactly as it was typed, so nothing is silently left out.
-// From/To filter on the activity's own date (course_date). Every Ibra
-// department is listed (0 included), like the report above; other
-// institutions and old typed names only when they organized something.
+// Activities per Department (PDF) — everything each department did, in the
+// same look as "Activity log: Courses per Department" above:
+//   Organized    = activities made in Create Activity, by their "Organized By"
+//     - courses.organizers (sql/course-organizers.sql) = [{ type: 'Ibra' |
+//       'Other', name }]: an activity with two organizers counts once for each.
+//     - Organized By = None (organizers = [] and no instructor_name): counted
+//       for no department (shown as a line in the header instead).
+//     - Older activities without the list only have instructor_name: matched
+//       to an Ibra department / other institution by name, otherwise listed
+//       under the name exactly as typed, so nothing is silently left out.
+//     - "Without attendance" activities (attendance_required = false) are the
+//       Activity Log containers: NOT counted here, their real courses are the
+//       log entries below (otherwise they would count twice).
+//     - Period: the activity's own date (course_date).
+//   Activity Log = courses logged in the Activity Log, counted with the SAME
+//     rules as the "Activity log: Courses per Department" report
+//     (countActivityLogCoursesPerDept): one department + one date = one course.
+//   Total = Organized + Activity Log.
+// Every Ibra department is listed (0 included); other institutions and old
+// typed names only when they have something.
 // ============================================================================
 async function populateOrganizerDepartmentSelect() {
     const el = document.getElementById('orgDeptChartDepartment');
@@ -1326,27 +1333,71 @@ async function populateOrganizerDepartmentSelect() {
 }
 populateOrganizerDepartmentSelect();
 
-// Every activity (paged past the 1,000-rows-per-request limit). Falls back to
-// no organizers list when sql/course-organizers.sql has not been run.
-async function fetchAllCoursesWithOrganizers() {
+// Every row of a query, paged past the 1,000-rows-per-request limit.
+async function fetchAllPaged(buildQuery) {
     const PAGE_SIZE = 1000;
-    const pull = async (columns) => {
-        let rows = [];
-        let from = 0;
-        while (true) {
-            const { data, error } = await client.from('courses').select(columns)
-                .order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1);
-            if (error) return { data: null, error };
-            if (!data || data.length === 0) break;
-            rows = rows.concat(data);
-            if (data.length < PAGE_SIZE) break;
-            from += PAGE_SIZE;
-        }
-        return { data: rows, error: null };
-    };
-    const withList = await pull('id, name, course_date, instructor_name, organizers');
-    if (!withList.error) return withList;
-    return pull('id, name, course_date, instructor_name');
+    let rows = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        if (!data || data.length === 0) break;
+        rows = rows.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+    }
+    return { data: rows, error: null };
+}
+
+// Every activity. Falls back to fewer columns when sql/course-organizers.sql
+// (organizers) has not been run.
+async function fetchAllCoursesWithOrganizers() {
+    const attempts = [
+        'id, name, course_date, instructor_name, organizers, attendance_required',
+        'id, name, course_date, instructor_name, attendance_required',
+        'id, name, course_date, instructor_name'
+    ];
+    let last = null;
+    for (const columns of attempts) {
+        last = await fetchAllPaged(() => client.from('courses').select(columns).order('id', { ascending: true }));
+        if (!last.error) return last;
+    }
+    return last;
+}
+
+// Activity Log courses per Ibra department — the SAME rules as
+// generateCoursesPerDepartmentPdf above (that report is left untouched):
+// only registrations whose department was confirmed through the Activity Log,
+// each entry's own department wins, and one (department, date) pair = one
+// course. Returns Map(short department name -> count). Paged, so a big
+// registrations / entries table is never cut off.
+async function countActivityLogCoursesPerDept(fromStr, toStr) {
+    const regsRes = await fetchAllPaged(() => client.from('registrations')
+        .select('id, institution_name_snapshot, department_chosen_via_log')
+        .like('institution_name_snapshot', 'Ibra - %').order('id', { ascending: true }));
+    if (regsRes.error) throw regsRes.error;
+    const deptByRegId = new Map(
+        (regsRes.data || [])
+            .filter(r => r.department_chosen_via_log)
+            .map(r => [r.id, r.institution_name_snapshot.replace('Ibra - ', '')])
+    );
+    const entriesRes = await fetchAllPaged(() => client.from('activity_log_entries')
+        .select('registration_id, title, entry_date_from, department'));
+    if (entriesRes.error) throw entriesRes.error;
+    let entries = entriesRes.data || [];
+    if (fromStr || toStr) entries = entries.filter(e => isWithinRange(e.entry_date_from, fromStr, toStr));
+
+    const seenDeptDate = new Set();
+    const countByDept = new Map();
+    entries.forEach(e => {
+        const dept = e.department || deptByRegId.get(e.registration_id);
+        if (!dept) return;
+        const key = `${dept}|${e.entry_date_from}`;
+        if (seenDeptDate.has(key)) return;
+        seenDeptDate.add(key);
+        countByDept.set(dept, (countByDept.get(dept) || 0) + 1);
+    });
+    return countByDept;
 }
 
 window.generateCoursesPerOrganizerPdf = async function () {
@@ -1356,9 +1407,10 @@ window.generateCoursesPerOrganizerPdf = async function () {
     const toStr = document.getElementById('orgDeptChartTo').value;
 
     try {
-        const [{ data: courses, error: courseErr }, { data: allInsts, error: instErr }] = await Promise.all([
+        const [{ data: courses, error: courseErr }, { data: allInsts, error: instErr }, logCountByDept] = await Promise.all([
             fetchAllCoursesWithOrganizers(),
-            client.from('institutions').select('name')
+            client.from('institutions').select('name'),
+            countActivityLogCoursesPerDept(fromStr, toStr)
         ]);
         if (courseErr) throw courseErr;
         if (instErr) throw instErr;
@@ -1386,35 +1438,54 @@ window.generateCoursesPerOrganizerPdf = async function () {
             return { key: 'Typed|' + name.toLowerCase(), label: name };            // old free-text organizer
         };
 
-        const inPeriod = (courses || []).filter(c => !(fromStr || toStr) || isWithinRange(c.course_date, fromStr, toStr));
-        const countByKey = new Map();
+        const organizedByKey = new Map();
         const labelByKey = new Map();
         let noOrganizerCount = 0;
-        inPeriod.forEach(c => {
-            let list = c.organizers;
-            try { if (typeof list === 'string') list = JSON.parse(list); } catch (e) { list = null; }
-            let rowsForCourse = [];
-            if (Array.isArray(list) && list.length > 0) {
-                rowsForCourse = list.map(o => o && organizerRow(o.type, o.name)).filter(Boolean);
-            } else if (String(c.instructor_name || '').trim()) {
-                const r = organizerRow('', c.instructor_name);
-                if (r) rowsForCourse = [r];
-            }
-            if (rowsForCourse.length === 0) { noOrganizerCount++; return; }
-            // The same organizer listed twice on one activity still counts once.
-            new Set(rowsForCourse.map(r => r.key)).forEach(key => {
-                countByKey.set(key, (countByKey.get(key) || 0) + 1);
+        (courses || [])
+            .filter(c => c.attendance_required !== false) // Activity Log containers: counted through their entries
+            .filter(c => !(fromStr || toStr) || isWithinRange(c.course_date, fromStr, toStr))
+            .forEach(c => {
+                let list = c.organizers;
+                try { if (typeof list === 'string') list = JSON.parse(list); } catch (e) { list = null; }
+                let rowsForCourse = [];
+                if (Array.isArray(list) && list.length > 0) {
+                    rowsForCourse = list.map(o => o && organizerRow(o.type, o.name)).filter(Boolean);
+                } else if (String(c.instructor_name || '').trim()) {
+                    const r = organizerRow('', c.instructor_name);
+                    if (r) rowsForCourse = [r];
+                }
+                if (rowsForCourse.length === 0) { noOrganizerCount++; return; }
+                // The same organizer listed twice on one activity still counts once.
+                new Set(rowsForCourse.map(r => r.key)).forEach(key => {
+                    organizedByKey.set(key, (organizedByKey.get(key) || 0) + 1);
+                });
+                rowsForCourse.forEach(r => labelByKey.set(r.key, r.label));
             });
-            rowsForCourse.forEach(r => labelByKey.set(r.key, r.label));
+
+        // Activity Log departments -> the same keys (current spelling when the
+        // department still exists).
+        const loggedByKey = new Map();
+        logCountByDept.forEach((count, dept) => {
+            const name = String(dept).replace(/^Ibra - /i, '').trim();
+            if (!name) return;
+            const hit = findCI(ibraDepts, name) || name;
+            const key = 'Ibra|' + hit;
+            loggedByKey.set(key, (loggedByKey.get(key) || 0) + count);
+            if (!labelByKey.has(key)) labelByKey.set(key, hit);
         });
 
-        const allRows = ibraDepts.map(d => ({ key: 'Ibra|' + d, dept: d, count: countByKey.get('Ibra|' + d) || 0 }));
-        countByKey.forEach((count, key) => {
+        const makeRow = (key, dept) => {
+            const organized = organizedByKey.get(key) || 0;
+            const logged = loggedByKey.get(key) || 0;
+            return { key, dept, organized, logged, total: organized + logged };
+        };
+        const allRows = ibraDepts.map(d => makeRow('Ibra|' + d, d));
+        new Set([...organizedByKey.keys(), ...loggedByKey.keys()]).forEach(key => {
             if (!key.startsWith('Ibra|') || !ibraDepts.includes(key.slice(5))) {
-                allRows.push({ key, dept: labelByKey.get(key) || key.split('|')[1], count });
+                allRows.push(makeRow(key, labelByKey.get(key) || key.split('|')[1]));
             }
         });
-        allRows.sort((a, b) => b.count - a.count || a.dept.localeCompare(b.dept));
+        allRows.sort((a, b) => b.total - a.total || a.dept.localeCompare(b.dept));
 
         // Department chooser: '' = all, "Ibra - X" = that department, otherwise
         // that other institution.
@@ -1424,7 +1495,7 @@ window.generateCoursesPerOrganizerPdf = async function () {
         if (chosenKey) {
             rows = allRows.filter(r => r.key === chosenKey);
             if (rows.length === 0 && chosenKey.startsWith('Other|') && otherInsts.includes(chosen)) {
-                rows = [{ key: chosenKey, dept: chosen, count: 0 }]; // organized nothing in this period
+                rows = [makeRow(chosenKey, chosen)]; // nothing in this period
             }
         }
         if (rows.length === 0) {
@@ -1432,6 +1503,7 @@ window.generateCoursesPerOrganizerPdf = async function () {
             return;
         }
 
+        // One stacked bar per department: Organized + Activity Log = everything.
         const canvas = document.getElementById('orgDeptChartOffscreen');
         const existing = Chart.getChart(canvas);
         if (existing) existing.destroy();
@@ -1439,14 +1511,17 @@ window.generateCoursesPerOrganizerPdf = async function () {
             type: 'bar',
             data: {
                 labels: rows.map(r => r.dept),
-                datasets: [{ label: 'Courses Organized', data: rows.map(r => r.count), backgroundColor: '#7C3AED' }]
+                datasets: [
+                    { label: 'Organized', data: rows.map(r => r.organized), backgroundColor: '#7C3AED', stack: 'all' },
+                    { label: 'Activity Log', data: rows.map(r => r.logged), backgroundColor: '#C4B5FD', stack: 'all' }
+                ]
             },
             options: {
                 responsive: false, animation: false,
-                plugins: { legend: { display: false }, title: { display: true, text: 'Courses Organized per Department' } },
+                plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Activities per Department' } },
                 scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 } },
-                    x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 60 } }
+                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+                    x: { stacked: true, ticks: { autoSkip: false, maxRotation: 60, minRotation: 60 } }
                 }
             }
         });
@@ -1459,23 +1534,27 @@ window.generateCoursesPerOrganizerPdf = async function () {
         const generatedLine = [`Generated: ${new Date().toLocaleString()}`];
         if (fromStr || toStr) generatedLine.push(`Period: ${fromStr ? formatDateDDMMYYYY(fromStr) : 'Start'} – ${toStr ? formatDateDDMMYYYY(toStr) : 'Present'}`);
         if (chosen) generatedLine.push(`Department: ${chosen.replace('Ibra - ', '')}`); // drawReportHeader reshapes info lines itself
+        generatedLine.push('Organized = activities from Create Activity (Organized By)');
+        generatedLine.push('Activity Log = courses logged in the Activity Log');
         if (!chosen && noOrganizerCount > 0) {
             generatedLine.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
         }
 
-        const imageY = drawReportHeader(doc, logo, 'Courses per Organizing Department Report', generatedLine);
+        const imageY = drawReportHeader(doc, logo, 'Activities per Department Report', generatedLine);
         doc.addImage(chartImage, 'PNG', 14, imageY, 182, 101);
 
-        const totalCourses = rows.reduce((sum, r) => sum + r.count, 0);
+        const sum = field => rows.reduce((acc, r) => acc + r[field], 0);
+        const boldFoot = text => ({ content: text, styles: { fontStyle: 'bold', font: 'Amiri' } });
         doc.autoTable({
             startY: imageY + 101 + 10,
-            head: [['#', 'Department', 'Number of Courses']],
-            body: rows.map((r, i) => [i + 1, reshapeArabicForPdf(r.dept), String(r.count)]),
+            head: [['#', 'Department', 'Organized', 'Activity Log', 'Total']],
+            body: rows.map((r, i) => [i + 1, reshapeArabicForPdf(r.dept), String(r.organized), String(r.logged), String(r.total)]),
             theme: 'grid',
             styles: { font: 'Amiri' },
             headStyles: { fillColor: [124, 58, 237], font: 'Amiri' },
             bodyStyles: { font: 'Amiri' },
-            foot: [[{ content: 'Total', colSpan: 2, styles: { fontStyle: 'bold', font: 'Amiri' } }, { content: String(totalCourses), styles: { fontStyle: 'bold', font: 'Amiri' } }]],
+            columnStyles: { 4: { fontStyle: 'bold' } },
+            foot: [[{ content: 'Total', colSpan: 2, styles: { fontStyle: 'bold', font: 'Amiri' } }, boldFoot(String(sum('organized'))), boldFoot(String(sum('logged'))), boldFoot(String(sum('total')))]],
             footStyles: { fillColor: [237, 233, 254], textColor: [91, 33, 182], font: 'Amiri' },
             showFoot: 'lastPage',
             didDrawPage: (data) => { if (data.pageNumber > 1) drawMinimalReportHeader(doc, logo); },
@@ -1491,7 +1570,7 @@ window.generateCoursesPerOrganizerPdf = async function () {
             note.textContent = '';
         }
     } catch (err) {
-        console.error('Courses per organizing department PDF failed:', err);
+        console.error('Activities per department PDF failed:', err);
         note.textContent = 'Something went wrong: ' + err.message;
     }
 };
