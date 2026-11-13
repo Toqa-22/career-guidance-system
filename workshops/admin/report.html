@@ -256,6 +256,28 @@
             </div>
 
             <div class="report-tool-card">
+                <h3>Courses per Organizing Department (PDF)</h3>
+                <p>Number of activities each department organized — from "Organized By" in Create Activity. An activity with two organizers counts once for each; activities organized by "None" are not counted. With a chart and full breakdown table.</p>
+                <div class="report-tool-row">
+                    <div class="report-field">
+                        <label class="report-field-label">From</label>
+                        <input type="date" id="orgDeptChartFrom">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">To</label>
+                        <input type="date" id="orgDeptChartTo">
+                    </div>
+                    <div class="report-field">
+                        <label class="report-field-label">Department</label>
+                        <select id="orgDeptChartDepartment"><option value="">All departments</option></select>
+                    </div>
+                    <button type="button" class="btn-action btn-add" onclick="generateCoursesPerOrganizerPdf()">Generate Report</button>
+                </div>
+                <p id="orgDeptChartNote" style="font-size: 12.5px; color: #7C3AED; margin-top: 10px;"></p>
+                <canvas id="orgDeptChartOffscreen" width="1200" height="650" style="position:absolute; left:-99999px; top:-99999px;"></canvas>
+            </div>
+
+            <div class="report-tool-card">
                 <h3>Evaluation / Exam Report (PDF)</h3>
                 <p>Pick an Evaluation or Exam, then get a report with a chart for every question (matched to its question type) and a full answers table at the end.</p>
                 <div class="report-tool-row">
@@ -273,7 +295,7 @@
 </div>
 </div>
 
-<script type="module" src="../js/report.js?v=27"></script>
+<script type="module" src="../js/report.js?v=28"></script>
 <script src="../js/sidebar.js"></script>
 <script type="module" src="../js/hall-requests-alert.js"></script>
 </body>
