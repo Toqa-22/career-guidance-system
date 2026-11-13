@@ -198,6 +198,52 @@ async function deleteExam(id, title, activityName) {
     }
 }
 
+// Exam attempts are saved with the staff number only (the exam page never
+// knows the person's name), so an attempt's staff_name is usually empty.
+// For the table and the Excel export, a missing name is looked up from the
+// person's saved profile (participants), else their registration for this
+// exam's activity, else any registration of theirs. Read-only: nothing is
+// written back. Both tables keep staff_number_normalized = lower(trim(...)).
+// Same helper in js/exam-participants.js (the Report page).
+async function fillMissingStaffNames(attempts, courseIdOf) {
+    const keyOf = a => String(a.staff_number || '').trim().toLowerCase();
+    const missing = [...new Set(attempts.filter(a => !String(a.staff_name || '').trim()).map(keyOf).filter(Boolean))];
+    if (missing.length === 0) return;
+
+    const profileNames = new Map();
+    const courseRegNames = new Map(); // "staff|course_id" -> name
+    const otherRegNames = new Map();
+    const CHUNK = 100; // keeps each request's address short
+    for (let i = 0; i < missing.length; i += CHUNK) {
+        const keys = missing.slice(i, i + CHUNK);
+        try {
+            const [{ data: profiles }, { data: regs }] = await Promise.all([
+                client.from('participants').select('staff_number_normalized, staff_name').in('staff_number_normalized', keys),
+                client.from('registrations').select('staff_number_normalized, staff_name, course_id').in('staff_number_normalized', keys)
+            ]);
+            (profiles || []).forEach(p => {
+                const name = String(p.staff_name || '').trim();
+                if (name) profileNames.set(p.staff_number_normalized, name);
+            });
+            (regs || []).forEach(r => {
+                const name = String(r.staff_name || '').trim();
+                if (!name) return;
+                courseRegNames.set(`${r.staff_number_normalized}|${r.course_id}`, name);
+                if (!otherRegNames.has(r.staff_number_normalized)) otherRegNames.set(r.staff_number_normalized, name);
+            });
+        } catch (err) {
+            console.error('Could not look up participant names:', err);
+        }
+    }
+
+    attempts.forEach(a => {
+        if (String(a.staff_name || '').trim()) return;
+        const key = keyOf(a);
+        const name = profileNames.get(key) || courseRegNames.get(`${key}|${courseIdOf(a)}`) || otherRegNames.get(key);
+        if (name) a.staff_name = name;
+    });
+}
+
 // ============================================================================
 // Export All Submitted Answers (Excel) — long format (one row per question
 // per submitted attempt), same idea as evaluations-dashboard.js's report,
@@ -211,12 +257,17 @@ async function buildAndDownloadReport() {
 
     try {
         const [{ data: exams }, { data: attempts }, { data: questions }] = await Promise.all([
-            client.from('activity_exams').select('id, title, courses(name)'),
+            client.from('activity_exams').select('id, title, course_id, courses(name)'),
             client.from('activity_exam_attempts').select('id, exam_id, staff_number, staff_name, total_score, max_score, submitted_at').eq('status', 'submitted'),
             client.from('activity_exam_questions').select('id, exam_id, question_text, display_order')
         ]);
 
         const examById = new Map((exams || []).map(e => [e.id, e]));
+        // Attempts are saved without the person's name - look it up (see fillMissingStaffNames).
+        await fillMissingStaffNames(attempts || [], a => {
+            const ex = examById.get(a.exam_id);
+            return ex ? ex.course_id : null;
+        });
         const questionById = new Map((questions || []).map(q => [q.id, q]));
         const attemptById = new Map((attempts || []).map(a => [a.id, a]));
         const attemptIds = (attempts || []).map(a => a.id);
