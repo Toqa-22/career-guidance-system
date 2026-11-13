@@ -1253,10 +1253,15 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         //   Ibra  -> the "Ibra - X" rows, saved as the short department name ("Pharmacy")
         //   Other -> every other institution, saved by its name
         // (the "Other (Please Specify)" catch-all is not a real organizer, so it is left out)
+        //   None  -> the activity has no organizer: no department to choose, no
+        //            extra organizers; saved as instructor_name = null and
+        //            organizers = [] (an empty list, which is how editing knows
+        //            it was None - an old activity that never had the list is not)
         const ORGANIZED_BY_PLACEHOLDER = {
             '': '-- Choose Ibra or Other first --',
             'Ibra': '-- Choose the Ibra department --',
-            'Other': '-- Choose the institution --'
+            'Other': '-- Choose the institution --',
+            'None': '-- No organizer --'
         };
         let organizedByLists = { Ibra: [], Other: [] };
 
@@ -1278,8 +1283,21 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                 opt.textContent = n;
                 select.appendChild(opt);
             });
-            select.disabled = !type;
+            select.disabled = !type || type === 'None';
             if (names.includes(previous)) select.value = previous;
+            syncOrganizedByNoneState();
+        }
+
+        // "None": hides the department list, the extra organizer rows and the
+        // "+ Add another organizer" button. The extra rows are only hidden (not
+        // removed), so switching back to Ibra/Other brings them back as they
+        // were; saving with None ignores them.
+        function syncOrganizedByNoneState() {
+            const isNone = document.getElementById('courseOrganizedByType')?.value === 'None';
+            const deptRow = document.getElementById('courseInstructorName')?.closest('.input-row');
+            const extraList = document.getElementById('extraOrganizersList');
+            const addRow = document.getElementById('addExtraOrganizerBtn')?.closest('.input-row');
+            [deptRow, extraList, addRow].forEach(el => { if (el) el.classList.toggle('hidden-element', isNone); });
         }
 
         async function refreshOrganizedByOptions() {
@@ -1325,6 +1343,16 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
         let institutionsLimitedColumnExists = false;
         const institutionsLimitedColumnReady = client.from('courses').select('institutions_limited').limit(1)
             .then(({ error }) => { if (!error) institutionsLimitedColumnExists = true; }, () => {});
+
+        // True only for an activity saved with Organized By = None: its organizers
+        // list was saved EMPTY ([]) and it has no organizer name. An older
+        // activity whose list was never saved (null) is not None - it still asks
+        // for a choice, as before.
+        function savedAsNoOrganizer(course) {
+            let raw = course ? course.organizers : null;
+            try { if (typeof raw === 'string') raw = JSON.parse(raw); } catch (e) { raw = null; }
+            return Array.isArray(raw) && raw.length === 0 && !String(course.instructor_name || '').trim();
+        }
 
         function parseSavedOrganizers(raw) {
             let list = raw;
@@ -1669,6 +1697,10 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
                         // only Ibra/Other chosen, so Save asks to choose it again or remove it.
                         addExtraOrganizerRow(matchOrganizer(o.type, o.name) || { type: o.type, name: '' });
                     });
+                } else if (savedAsNoOrganizer(course)) {
+                    // Saved with "None" (an empty organizers list and no name).
+                    typeSel.value = 'None';
+                    fillOrganizedByDepartmentSelect();
                 }
             }
             document.getElementById('courseParticipantCount').value = course.participant_count || '';
@@ -1861,31 +1893,40 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
             const allowed_sex = document.getElementById('courseGender').value;
             const activity_type = document.getElementById('courseActivityType').value || null;
             await refreshOrganizedByOptions(); // pick up departments added/removed since the page opened
-            if (!document.getElementById('courseOrganizedByType').value) {
-                alert('Please choose "Organized By" - Ibra or Other - it is required.');
+            const organizedByType = document.getElementById('courseOrganizedByType').value;
+            if (!organizedByType) {
+                alert('Please choose "Organized By" - Ibra, Other or None - it is required.');
                 document.getElementById('courseOrganizedByType').focus();
                 return;
             }
             let instructor_name = document.getElementById('courseInstructorName').value.trim() || null;
-            if (!instructor_name) {
-                alert('Please choose the department / institution under "Organized By" - it is required.');
-                document.getElementById('courseInstructorName').focus();
-                return;
+            let organizersList;
+            if (organizedByType === 'None') {
+                // No organizer: nothing to choose, extra organizer rows ignored.
+                instructor_name = null;
+                organizersList = [];
+                await organizersColumnReady;
+            } else {
+                if (!instructor_name) {
+                    alert('Please choose the department / institution under "Organized By" - it is required.');
+                    document.getElementById('courseInstructorName').focus();
+                    return;
+                }
+                // An old cached copy of this page has no organizer rows - never let it
+                // overwrite an activity that has 2+ organizers with just the first one.
+                if (!document.getElementById('extraOrganizersList') && loadedOrganizersCount > 1) {
+                    alert('This page is out of date. Please press Ctrl+F5 to reload it, then save again.');
+                    return;
+                }
+                organizersList = collectOrganizers(organizedByType, instructor_name);
+                if (!organizersList) return;
+                await organizersColumnReady;
+                if (organizersList.length > 1 && !organizersColumnExists) {
+                    alert('To save more than one organizer, please run sql/course-organizers.sql in Supabase first (or remove the extra organizers).');
+                    return;
+                }
+                instructor_name = organizersDisplayText(organizersList);
             }
-            // An old cached copy of this page has no organizer rows - never let it
-            // overwrite an activity that has 2+ organizers with just the first one.
-            if (!document.getElementById('extraOrganizersList') && loadedOrganizersCount > 1) {
-                alert('This page is out of date. Please press Ctrl+F5 to reload it, then save again.');
-                return;
-            }
-            const organizersList = collectOrganizers(document.getElementById('courseOrganizedByType').value, instructor_name);
-            if (!organizersList) return;
-            await organizersColumnReady;
-            if (organizersList.length > 1 && !organizersColumnExists) {
-                alert('To save more than one organizer, please run sql/course-organizers.sql in Supabase first (or remove the extra organizers).');
-                return;
-            }
-            instructor_name = organizersDisplayText(organizersList);
             // Only sent once the column exists, so saving keeps working before the SQL is run.
             const organizersPayload = organizersColumnExists ? { organizers: organizersList } : {};
             // Institutional Allocations: limited when some institutions are
