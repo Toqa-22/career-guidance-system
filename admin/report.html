@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Noto Sans Arabic: the font the PDF's Arabic text is drawn with -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/admin-pages.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<script src="../js/theme-rotator.js?v=1"></script>
+<script src="../js/notify.js"></script>
+<script src="../js/idle-timeout.js" data-login-path="../index.html"></script>
+<!-- Same PDF libraries as the Workshops reports -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+.admin-report-row { grid-template-columns: 1fr 1fr auto; }
+#adminReportPrintBtn[disabled] { opacity: .6; cursor: wait; }
+</style>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="../hub.html">← Hub</a>
+            <a class="admin-nav-link" href="users.html">Users</a>
+            <a class="admin-nav-link" href="logins.html">Login History</a>
+            <a class="admin-nav-link" href="institutions.html">Ibra Department</a>
+            <a class="admin-nav-link" href="halls.html">Halls</a>
+            <a class="admin-nav-link" href="add-institution.html">Health Center Institution</a>
+            <a class="admin-nav-link" href="fix-institutions.html">Fix Missing Institutions</a>
+            <a class="admin-nav-link" href="staff-allocation.html">Staff Allocation</a>
+            <a class="admin-nav-link" href="deletion-log.html">Deletion Log</a>
+            <a class="admin-nav-link" href="registration-log.html">Registration Log</a>
+            <a class="admin-nav-link active" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutHubAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+<div class="admin-page-body">
+    <div class="admin-card">
+        <h2 style="color: var(--dynamic-primary-dark, #5B21B6);">Activities per Department Report</h2>
+        <p style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
+            Everything each department did in the period: the activities it organized ("Organized By" in
+            Create Activity) and the courses its staff logged in the Activity Log — with a chart, a summary
+            table, and the details behind every number (activity names; titles, dates, staff name, staff
+            number and phone). Only departments and institutions that exist now are shown.
+            Leave both dates empty for all dates.
+        </p>
+        <div class="admin-form-row admin-report-row">
+            <div><label for="adminReportFrom">From</label><input type="date" id="adminReportFrom"></div>
+            <div><label for="adminReportTo">To</label><input type="date" id="adminReportTo"></div>
+            <button type="button" class="admin-btn" id="adminReportPrintBtn">🖨 Print Report</button>
+        </div>
+        <p class="admin-note" id="adminReportNote"></p>
+    </div>
+</div>
+
+    </div>
+    </div>
+</div>
+
+<script src="../js/sidebar.js"></script>
+<script type="module" src="../js/admin-report.js?v=1"></script>
+
+</body>
+</html>

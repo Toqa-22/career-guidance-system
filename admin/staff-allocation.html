@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Allocation</title>
+<link rel="icon" href="../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../assets/logo-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/admin-pages.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<script src="../js/theme-rotator.js?v=1"></script>
+<script src="../js/notify.js"></script>
+<script src="../js/idle-timeout.js" data-login-path="../index.html"></script>
+<style>
+/* Below 720px admin-pages.css already turns this table into stacked
+   cards (one per participant) — the 900px min-width from the wide-screen
+   scroll wrapper above would otherwise force horizontal scrolling on
+   that stacked layout too, so it's dropped once cards take over. */
+@media (max-width: 720px) {
+    #staffAllocTable { min-width: 0 !important; }
+    /* Stacked cards: show the row number as "#3" on its own line. */
+    #staffAllocTable td.row-num-cell::before { content: '#'; }
+    #staffAllocTable thead { display: none; }
+}
+#staffAllocTable td.row-num-cell { color: #64748b; font-weight: 700; white-space: nowrap; }
+
+/* Screen sizes:
+   - Desktop: the table's box is at most 888px wide (admin card), so the
+     fixed 900px minimum width cut off the "Change" column a little. The
+     table now fits its box; the scroll wrapper stays only as a safety net.
+   - Whenever the table's own box is narrower than the 8 columns need
+     (tablets, small laptops, or the side menu open), the table had to be
+     swiped sideways to see Courses / Change. It now switches to the same
+     one-card-per-person layout as phones (same rules as admin-pages.css
+     uses below 720px). Decided by the BOX width (container query), not
+     the screen width, because the side menu can be open or closed at the
+     same screen width. Older browsers without container queries keep the
+     table, scrolling inside its box as before.
+   - Very small phones: the search box (220px minimum) and the Change box
+     (190px minimum) were wider than the card; they now shrink to fit. */
+#staffAllocTable { min-width: 0 !important; }
+#staffAllocTableWrap { container-type: inline-size; }
+@container (max-width: 879px) {
+    #staffAllocTable, #staffAllocTable thead, #staffAllocTable tbody, #staffAllocTable th, #staffAllocTable td, #staffAllocTable tr { display: block; }
+    #staffAllocTable th { display: none; }
+    #staffAllocTable tr { margin-bottom: 12px; border: 1px solid #f1f5f9; border-radius: 10px; padding: 8px; }
+    /* The header row would otherwise show as an empty bordered card. */
+    #staffAllocTable thead { display: none; }
+    #staffAllocTable td.row-num-cell::before { content: '#'; }
+    #staffAllocTable .reassign-cell { min-width: 0; }
+    #staffAllocTable .reassign-cell select { max-width: 100%; box-sizing: border-box; }
+}
+@media (max-width: 720px) {
+    #staffAllocSearch { min-width: 0 !important; flex-basis: 100% !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="../hub.html">← Hub</a>
+            <a class="admin-nav-link" href="users.html">Users</a>
+            <a class="admin-nav-link" href="logins.html">Login History</a>
+            <a class="admin-nav-link" href="institutions.html">Ibra Department</a>
+            <a class="admin-nav-link" href="halls.html">Halls</a>
+            <a class="admin-nav-link" href="add-institution.html">Health Center Institution</a>
+            <a class="admin-nav-link" href="fix-institutions.html">Fix Missing Institutions</a>
+            <a class="admin-nav-link active" href="staff-allocation.html">Staff Allocation</a>
+            <a class="admin-nav-link" href="deletion-log.html">Deletion Log</a>
+            <a class="admin-nav-link" href="registration-log.html">Registration Log</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutHubAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+<div class="admin-page-body">
+    <div class="admin-card">
+        <h2 style="color: var(--dynamic-primary-dark, #5B21B6);">Staff Allocation</h2>
+        <p style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
+            Every workshop participant across every activity — the same staff number appears once per
+            activity they've registered for, since a person can be associated with more than one
+            department. Change the institution or department for any one of them below.
+        </p>
+        <div class="admin-form-row" style="margin-bottom: 16px; display:flex; gap:10px; flex-wrap:wrap;">
+            <input type="text" id="staffAllocSearch" placeholder="Search by name, staff number, or department..." style="flex:2; min-width:220px;">
+            <select id="staffAllocInstitutionFilter" style="flex:1; min-width:160px;">
+                <option value="">All Institutions</option>
+                <option value="IBRA">Ibra</option>
+                <option value="OTHER">Health Center</option>
+            </select>
+            <select id="staffAllocDepartmentFilter" style="flex:1; min-width:160px;">
+                <option value="">All Departments</option>
+            </select>
+            <!-- Prints every participant matching the search/filters above (all pages) -->
+            <button type="button" id="staffAllocPrintBtn" class="admin-btn admin-btn-secondary no-print" style="flex:0 0 auto;">🖨 Print</button>
+        </div>
+        <p id="staffAllocEmpty" class="fix-institutions-empty hidden-element">No participants found.</p>
+        <div id="staffAllocTableWrap" style="overflow-x: auto; max-width: 100%;">
+        <table class="admin-table hidden-element" id="staffAllocTable" style="min-width: 900px;">
+            <thead>
+                <tr>
+                    <th style="width:44px;">#</th>
+                    <th>Participant Name</th>
+                    <th>Staff Number</th>
+                    <th>Phone Number</th>
+                    <th>Institution</th>
+                    <th>Department</th>
+                    <th>Courses</th>
+                    <th>Change</th>
+                </tr>
+            </thead>
+            <tbody id="staffAllocBody">
+                <tr class="admin-empty-row"><td colspan="8">Loading…</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <div class="pg-controls" id="staffAllocPagination"></div>
+    </div>
+</div>
+
+    </div>
+    </div>
+</div>
+
+<script src="../js/sidebar.js"></script>
+<script type="module" src="../js/staff-allocation.js?v=7"></script>
+
+</body>
+</html>
