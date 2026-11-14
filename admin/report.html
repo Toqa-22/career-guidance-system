@@ -23,8 +23,25 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
-.admin-report-row { grid-template-columns: 1fr 1fr auto; }
+.admin-report-row { grid-template-columns: 1fr 1fr 1.4fr; }
+@media (max-width: 720px) { .admin-report-row { grid-template-columns: 1fr; } }
+.admin-form-row select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 13.5px; font-family: inherit; background: #fff; }
+.admin-form-row select:focus { outline: none; border-color: var(--dynamic-primary, #7C3AED); }
 #adminReportPrintBtn[disabled] { opacity: .6; cursor: wait; }
+/* pick one or more departments / institutions */
+.report-pick { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; background: #fafaff; }
+.report-pick-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.report-pick-top input { flex: 1 1 200px; min-width: 0; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 13.5px; font-family: inherit; }
+.report-pick-top button { padding: 8px 12px; border-radius: 9px; border: 1px solid #d1d5db; background: #fff; font-weight: 700; font-size: 12.5px; font-family: inherit; cursor: pointer; color: #334155; }
+.report-pick-top button:hover { border-color: var(--dynamic-primary, #7C3AED); color: var(--dynamic-primary-dark, #5B21B6); }
+.report-pick-count { font-size: 12.5px; font-weight: 800; color: var(--dynamic-primary-dark, #5B21B6); }
+.report-pick-list { max-height: 260px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; }
+.report-pick-list label { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; line-height: 1.3; }
+.report-pick-list label:hover { background: #f1f0ff; }
+.report-pick-list label[hidden] { display: none; }
+.report-pick-list input[type="checkbox"] { width: 16px; height: 16px; padding: 0; margin: 1px 0 0; accent-color: var(--dynamic-primary, #7C3AED); flex: none; cursor: pointer; }
+.report-pick-empty { font-size: 13px; color: #64748b; padding: 6px 8px; }
+.report-actions { margin-top: 14px; display: flex; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -75,13 +92,33 @@
             Create Activity) and the courses its staff logged in the Activity Log — with a chart, a summary
             table, and the details behind every number (activity names; titles, dates, staff name, staff
             number and phone). Only departments and institutions that exist now are shown.
-            Leave both dates empty for all dates.
+            Leave both dates empty for all dates. Choose "All", or Ibra Hospital and one or more
+            departments, or other institutions and one or more of them.
         </p>
         <div class="admin-form-row admin-report-row">
             <div><label for="adminReportFrom">From</label><input type="date" id="adminReportFrom"></div>
             <div><label for="adminReportTo">To</label><input type="date" id="adminReportTo"></div>
-            <button type="button" class="admin-btn" id="adminReportPrintBtn">🖨 Print Report</button>
+            <div><label for="adminReportScope">Institution</label>
+                <select id="adminReportScope">
+                    <option value="all">All</option>
+                    <option value="ibra">Ibra Hospital — choose departments</option>
+                    <option value="other">Other institutions — choose institutions</option>
+                </select>
+            </div>
         </div>
+        <!-- One or more departments (Ibra) or institutions (Other), from the
+             Institutions list as it is now (admin > Ibra Department / Health
+             Center Institution). Hidden when "All" is chosen. -->
+        <div class="report-pick" id="adminReportPick" hidden>
+            <div class="report-pick-top">
+                <input type="search" id="adminReportPickSearch" placeholder="Search…" aria-label="Search the list">
+                <button type="button" id="adminReportPickAll">Select all</button>
+                <button type="button" id="adminReportPickNone">Clear</button>
+                <span class="report-pick-count" id="adminReportPickCount">0 selected</span>
+            </div>
+            <div class="report-pick-list" id="adminReportPickList"></div>
+        </div>
+        <div class="report-actions"><button type="button" class="admin-btn" id="adminReportPrintBtn">🖨 Print Report</button></div>
         <p class="admin-note" id="adminReportNote"></p>
     </div>
 </div>
@@ -91,7 +128,7 @@
 </div>
 
 <script src="../js/sidebar.js"></script>
-<script type="module" src="../js/admin-report.js?v=1"></script>
+<script type="module" src="../js/admin-report.js?v=2"></script>
 
 </body>
 </html>
