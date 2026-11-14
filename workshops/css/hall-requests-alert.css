@@ -1,0 +1,59 @@
+/* ==========================================================================
+   hall-requests-alert.css
+   A large centered alert (see js/hall-requests-alert.js) that appears once
+   on every page load of a page that includes this file, and again every 3
+   hours if the admin stays on the same page without navigating — showing
+   how many Department Hall Requests are currently pending review. Loaded
+   on every Workshops admin page EXCEPT Home (chart.html) and Department
+   Hall Requests itself (which already shows the list directly).
+   ========================================================================== */
+
+.hall-alert-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 4000; padding: 20px; opacity: 0; transition: opacity 220ms ease;
+}
+.hall-alert-overlay.show { opacity: 1; }
+
+.hall-alert-card {
+    position: relative; background: white; border-top: 6px solid #F59E0B;
+    border-radius: 22px; box-shadow: 0 25px 60px rgba(0, 0, 0, .25);
+    padding: 44px 40px 36px; max-width: 480px; width: 100%; text-align: center;
+    transform: scale(.92) translateY(10px); transition: transform 220ms ease;
+}
+.hall-alert-overlay.show .hall-alert-card { transform: scale(1) translateY(0); }
+
+.hall-alert-icon {
+    width: 76px; height: 76px; border-radius: 50%; background: #FEF3C7; color: #B45309;
+    display: flex; align-items: center; justify-content: center; font-size: 36px;
+    margin: 0 auto 20px;
+}
+.hall-alert-title { font-weight: 800; font-size: 21px; color: #0f172a; margin-bottom: 12px; }
+.hall-alert-count { font-size: 15.5px; color: #64748b; line-height: 1.8; margin-bottom: 30px; }
+.hall-alert-count strong { color: #B45309; font-size: 19px; }
+
+.hall-alert-actions { display: flex; gap: 10px; }
+.hall-alert-actions button {
+    flex: 1; padding: 14px; border-radius: 10px; border: none; font-weight: 800;
+    cursor: pointer; font-size: 14.5px; font-family: inherit;
+    transition: transform .15s ease, background .15s ease;
+}
+.hall-alert-actions button:hover { transform: translateY(-1px); }
+.hall-alert-dismiss { background: #f1f5f9; color: #334155; }
+.hall-alert-go { background: #F59E0B; color: white; }
+.hall-alert-go:hover { background: #D97706; }
+
+.hall-alert-close {
+    position: absolute; top: 16px; right: 16px; background: none; border: none;
+    font-size: 17px; color: #94a3b8; cursor: pointer; padding: 6px; line-height: 1;
+    border-radius: 8px; transition: background .15s ease, color .15s ease;
+}
+.hall-alert-close:hover { background: #FEF3C7; color: #B45309; }
+
+@media (max-width: 480px) {
+    .hall-alert-card { padding: 34px 22px 26px; }
+    .hall-alert-icon { width: 62px; height: 62px; font-size: 30px; margin-bottom: 16px; }
+    .hall-alert-title { font-size: 18px; }
+    .hall-alert-count { font-size: 14px; margin-bottom: 24px; }
+    .hall-alert-actions { flex-direction: column; }
+}

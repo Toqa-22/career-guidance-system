@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="../../assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/logo-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="../../assets/logo-192.png">
+<link rel="apple-touch-icon" href="../../assets/logo-192.png">
+<title>Create Exam</title>
+<!-- Must run before the page renders: bounces back to login if not authenticated -->
+<script src="../js/auth-guard.js"></script>
+<script src="../../js/idle-timeout.js" data-login-path="../../index.html"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/admin-header.css">
+<link rel="stylesheet" href="../css/notifications.css">
+<link rel="stylesheet" href="../css/hall-requests-alert.css">
+<link rel="stylesheet" href="../css/responsive.css">
+<!-- Loaded early so alert() is already replaced before any page script runs -->
+<script src="../js/notify.js"></script>
+<script src="../../js/theme-rotator.js?v=1"></script>
+</head>
+<body>
+
+<div class="admin-shell">
+    <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle menu">
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+        <span class="sidebar-toggle-bar"></span>
+    </button>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-shape sidebar-shape-1"></div>
+        <div class="sidebar-shape sidebar-shape-2"></div>
+        <div class="sidebar-shape sidebar-shape-3"></div>
+        <div class="sidebar-shape sidebar-shape-4"></div>
+        <div class="sidebar-shape sidebar-shape-5"></div>
+        <div class="admin-sidebar-content">
+        <div class="admin-sidebar-brand">
+            <div class="admin-brand-icon"><img src="../assets/logo.png" alt="Ibra Hospital" class="brand-logo-img"></div>
+            <p class="sidebar-username" id="sidebarUsername"></p>
+        </div>
+        <nav class="admin-sidebar-nav">
+            <a class="admin-nav-link" href="chart.html">Home</a>
+            <a class="admin-nav-link" href="dashboard.html">Activity Dashboard</a>
+            <a class="admin-nav-link" href="certificates.html">Certificates</a>
+            <a class="admin-nav-link" href="evaluations-dashboard.html">Evaluations Dashboard</a>
+            <a class="admin-nav-link active" href="exam-dashboard.html">Exam Dashboard</a>
+            <a class="admin-nav-link" href="hall-reservation.html">Hall Reservation</a>
+            <a class="admin-nav-link" href="department-hall-requests.html">Dept Hall Requests</a>
+            <a class="admin-nav-link" href="program-form.html">Dite Form</a>
+            <a class="admin-nav-link" href="report.html">Report</a>
+        </nav>
+        <a class="admin-nav-logout" href="#" onclick="logoutAdmin(); return false;">Logout</a>
+    </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-main-wrap">
+    <div class="container">
+    <div class="page-brand-header">Professional Development and Career Guidance</div>
+
+        <div class="grid-panel">
+            <div class="card-box">
+                <h2 id="formPanelTitle">Create New Exam</h2>
+                <a href="exam-dashboard.html" class="return-to-dashboard-link" style="display:inline-block; margin-bottom:14px;">← Return to Exam dashboard</a>
+                <form id="examForm">
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">1</span> Basic Exam Information</div>
+                        <div class="basic-info-fields">
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <span class="field-label">Title</span>
+                                    <input type="text" id="examTitle" placeholder="e.g. BLS Final Exam" required>
+                                </div>
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div>
+                                    <span class="field-label">Choose Activity</span>
+                                    <select id="examCourseSelect" required>
+                                        <option value="">-- Choose Activity --</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <label class="hall-checkbox-label" style="margin-top:0;">
+                                    <input type="checkbox" id="examRequireBeforeRegistration">
+                                    Require this exam before registration
+                                </label>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">When off (the default), this exam still exists and can be used as a certificate requirement, or shared via its own preview/solve links — but registering for the linked Activity is never blocked by it. When on, a participant must complete this exam before the registration form for that Activity is shown.</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr; align-items: center;">
+                                <label style="display:flex; align-items:center; gap:10px; background:white; border:1px solid #d1d5db; border-radius:12px; padding:10px 14px; flex:1; cursor:pointer;">
+                                    <span style="font-size:13px; font-weight:700; color:#334155; white-space:nowrap;">Theme Color</span>
+                                    <input type="color" id="examThemeColor" value="#7C3AED" style="width:42px; height:32px; padding:0; border:1px solid #d1d5db; border-radius:8px; cursor:pointer;">
+                                    <span id="examThemeColorPreview" style="font-size:12px; color:#94a3b8;">#7C3AED</span>
+                                </label>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">Used for the buttons and accents on this exam's own public page.</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <label class="hall-checkbox-label" style="margin-top:0;">
+                                    <input type="checkbox" id="examTimerEnabled">
+                                    Enable Timer
+                                </label>
+                            </div>
+                            <p class="section-hint" style="margin-top: -4px;">When off (the default), this exam has no time limit — a participant answers at their own pace and submits manually, with no countdown shown. When on, the Duration below starts a countdown the moment a participant opens the exam, and it auto-submits whatever was answered so far the instant it reaches zero.</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;" id="examDurationRow">
+                                <div style="flex:1;">
+                                    <label style="font-size:13px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Duration (minutes.seconds)</label>
+                                    <input type="text" id="examDurationInput" inputmode="decimal" pattern="^\d+(\.\d{1,2})?$" value="30" style="width:140px;">
+                                    <span id="examDurationPreview" style="margin-left:10px; font-size:12.5px; color:#64748b;"></span>
+                                </div>
+                            </div>
+                            <p class="section-hint" id="examDurationHint" style="margin-top: -4px;">Enter it as <b>minutes.seconds</b> — the digits after the dot ARE the seconds, not a fraction of a minute. So <code>2.30</code> means 2 min 30 sec, and <code>2.5</code> means 2 min 5 sec (not 2 min 30 sec). Just <code>30</code> (no dot) means 30 min.</p>
+
+                            <div class="input-row" style="grid-template-columns: 1fr;">
+                                <div style="flex:1;">
+                                    <label style="font-size:13px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Comment (optional)</label>
+                                    <textarea id="examComment" placeholder="A note shown to participants at the top of the exam page (e.g. instructions)..." rows="3" style="width:100%; padding:10px 14px; border:1px solid #d1d5db; border-radius:12px; font-family:inherit; font-size:13px; resize:vertical;"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">2</span> Questions</div>
+                        <p class="section-hint" style="margin-top:-6px;">At least one question is required. Every question is auto-scored — set its Points and its Correct Answer so the app can grade it automatically on submit. Use the "Page" number next to each question to put it on a later page (pages must be filled in order).</p>
+                        <p id="examQuestionsRequiredHint" class="hidden-element" style="margin-top:-6px; color:#dc2626; font-weight:700; font-size:12.5px;">Add at least one question before saving.</p>
+                        <div id="examQuestionsList"></div>
+                        <button type="button" class="btn-action btn-add" id="addExamQuestionBtn" style="margin-top:10px;">+ Add Question</button>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">3</span> Page Content (optional)</div>
+                        <p class="section-hint" style="margin-top:-6px;">Informational reading shown to participants on the public exam page — use the "Page" number to put it on the same page as its related questions (content is shown before that page's questions).</p>
+                        <div id="examContentList"></div>
+                        <button type="button" class="btn-action btn-add" id="addExamContentBtn" style="margin-top:10px;">+ Add Content</button>
+                    </div>
+
+                    <div class="array-group-box">
+                        <div class="section-title"><span class="section-number">4</span> Page Titles</div>
+                        <div id="examPageTitlesSummary"></div>
+                    </div>
+
+                    <!-- Primary Actions Row -->
+                    <div class="button-group">
+                        <button type="submit" class="btn-flex btn-primary-action" id="submitExamFormBtn">Save</button>
+                        <button type="button" class="btn-flex btn-secondary" onclick="window.location.href='exam-dashboard.html'">Cancel</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script type="module" src="../js/create-exam.js?v=5"></script>
+<script src="../js/sidebar.js"></script>
+<script type="module" src="../js/hall-requests-alert.js"></script>
+</body>
+</html>

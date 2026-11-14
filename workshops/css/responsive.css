@@ -1,0 +1,126 @@
+/* Additive-only responsive tweaks — desktop layout is untouched */
+.nav-buttons { flex-wrap: wrap; row-gap: 12px; }
+
+/* Safety net: whatever content occasionally runs wider than expected on a
+   narrow screen (a long select option, a rigid-width field) shows a
+   horizontal scrollbar on that element instead of ever pushing the WHOLE
+   page sideways. */
+html, body { overflow-x: hidden; }
+
+/* Participant Registrations (admin/students.html) toolbar — the filter
+   select + export button next to the "Participant Registrations" heading.
+   Wraps instead of overflowing on a narrow screen, same as every other
+   flex toolbar row in the project. */
+.students-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.students-toolbar-select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; font-family: inherit; }
+
+/* Explicit horizontal-scroll wrapper around the wide participants table —
+   belt-and-suspenders alongside .table-card's own overflow-x: auto (see
+   css/report.css), and consistent with the wrapper already used around the
+   tables on admin/dashboard.html, admin/certificates.html and
+   admin/evaluations-dashboard.html. */
+.table-scroll-wrap { overflow-x: auto; }
+
+/* Create Activity (admin/create-course.html) is a long, many-section form —
+   these additive rules let its section titles, per-field "Page" number
+   inputs, and long option lists (e.g. Directorate) wrap and shrink instead
+   of overflowing, on top of the existing @640 rules further down. */
+.section-title { flex-wrap: wrap; row-gap: 6px; }
+.ms-option { overflow-wrap: anywhere; }
+.allocation-item-label-group span { overflow-wrap: anywhere; }
+
+
+@media (max-width: 640px) {
+    body { padding: 20px 12px; }
+    /* Full-bleed pages (login split-screen, register.html hero) must stay
+       flush edge-to-edge on mobile — the generic body padding above would
+       otherwise show a gap of the page background around their color panels. */
+    body.full-bleed { padding: 0; }
+    .title { font-size: 30px; }
+    .subtitle { font-size: 13px; padding: 0 8px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .input-row { grid-template-columns: 1fr; }
+    .date-triple-row { grid-template-columns: 1fr !important; }
+    .button-group { flex-direction: column; }
+    .allocation-controls, .allocation-bulk-row { flex-direction: column; }
+    .allocation-item-label-group { width: 60%; font-size: 12px; }
+    .table-header-row { flex-direction: column; gap: 14px; align-items: stretch; }
+    .export-btn { width: 100%; }
+    .students-toolbar { flex-direction: column; align-items: stretch; width: 100%; }
+    .students-toolbar-select { width: 100%; }
+    .card-box, .list-table-container, .table-card { padding: 22px; }
+    .form-card { padding: 24px; }
+    .btn-nav { padding: 12px 18px !important; font-size: 14px !important; }
+
+    /* Participant Registrations table has 11 columns — too many to fit a
+       phone screen even with the horizontal-scroll wrapper. Drop the
+       lowest-priority columns (#, Phone Number, Staff Number) so the
+       remaining ones (Name, Gender, Institution, Activity, Date, Attended,
+       Answers, Action) fit with far less side-scrolling; the scroll wrapper
+       still catches anything that doesn't fit. */
+    .students-table th:nth-child(1), .students-table td:nth-child(1),
+    .students-table th:nth-child(2), .students-table td:nth-child(2),
+    .students-table th:nth-child(4), .students-table td:nth-child(4) {
+        display: none;
+    }
+    .students-table th, .students-table td { padding: 10px 8px; font-size: 12.5px; white-space: nowrap; }
+    .stats { justify-content: flex-start; }
+    .stat-card { width: calc(50% - 7px); box-sizing: border-box; }
+
+    /* Create Activity / Create Evaluation — any inline flex "label + input
+       side by side" row (Theme Color, Comment, etc.) wraps instead of
+       squeezing on a phone-width screen. */
+    .array-group-box { padding: 16px; }
+    .array-group-box label[style*="display:flex"] { flex-wrap: wrap; }
+    .custom-question-card { padding: 12px; }
+    .ac-anchor-select, .cq-answer-input, .cq-text-input { width: 100%; }
+    .cq-header-row { gap: 6px; }
+    .cq-header-row .ac-order-badge { flex-basis: 100%; }
+
+    /* Section titles (Create Activity / Create Evaluation) — the badge +
+       heading text + an optional "Page" number input (Required Documents,
+       Institutional Allocations) all need to fit a phone-width column.
+       The section-number badge shrinks slightly and the page input, when
+       present, drops to its own full-width row instead of being squeezed
+       to the right of long heading text like "Institutional Allocations /
+       Chair Mapping (optional)". */
+    .section-title { font-size: 14.5px; gap: 8px; }
+    .section-title .section-number { width: 22px; height: 22px; font-size: 12px; }
+    .section-page-label { margin-left: 0; flex-basis: 100%; }
+
+    /* Targeting field header (Section 2) — label, "Show to registrants"
+       toggle, and its own "Page" number input already wrap via
+       css/multiselect.css's flex-wrap, but the toggle label's text can
+       still crowd the page input on a narrow phone — giving the page
+       input its own row keeps both legible instead of visually merging. */
+    .field-page-label { flex-basis: 100%; justify-content: flex-end; }
+
+    /* Multiselect boxes (Target Designations & Seats, Section 2) and their
+       search input (Directorate) already go full-width via the project's
+       default input styling — this just tightens padding so a long option
+       label (e.g. a full Directorate name) has more room to wrap instead
+       of crowding its own checkbox. */
+    .multiselect-box { padding: 10px; }
+    .ms-option { padding: 6px 4px; }
+
+    /* Page Titles summary (Section 8) — label above its input instead of
+       side-by-side, matching every other stacked label+field pattern on
+       this page at phone width. */
+    .page-title-row { flex-direction: column; align-items: stretch; gap: 4px; }
+
+    /* Grid-style questions (register.html / evaluation.html / exam form) —
+       tighten column padding and shrink the row-label column so a grid
+       with several columns needs less side-scrolling to answer on a phone.
+       .cq-grid-scroll-wrapper (css/workshops.css) still catches whatever
+       doesn't fit, so nothing is ever cut off. */
+    .cq-grid-table { font-size: 11.5px; min-width: 420px; }
+    .cq-grid-table th, .cq-grid-table td { padding: 6px 5px; }
+    .cq-grid-table th, .cq-grid-table td:not(.cq-grid-row-label) { min-width: 56px; }
+    .cq-grid-row-label { min-width: 120px; max-width: 160px; }
+    .cq-choice-label { font-size: 13px; }
+}
+@media (max-width: 400px) {
+    .title { font-size: 24px; }
+    .course-card { width: 100%; }
+    .seat-number { font-size: 42px; }
+}
