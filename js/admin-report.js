@@ -13,6 +13,9 @@
 //   - Only departments / institutions in the Institutions list TODAY are
 //     shown: added ones appear (0 included), deleted ones and old typed names
 //     are left out and counted in a "Not shown" line.
+//   - v2: the report can cover "All", or Ibra Hospital + one or more chosen
+//     departments, or other institutions + one or more chosen institutions
+//     (the picker lists the Institutions table as it is now).
 // Then a details section per department with what is behind each number:
 // activity names, and the Activity Log titles, dates, staff name / number /
 // phone (a missing name or phone is filled from the person's profile).
@@ -164,10 +167,15 @@ async function fetchActivityLog(fromStr, toStr) {
     return { countByDept, groupsByDept };
 }
 
+// The two lists the report can be narrowed to (same split everywhere).
+const ibraDeptsOf = instNames => instNames.filter(n => n.startsWith('Ibra - ')).map(n => n.replace('Ibra - ', '').trim());
+const otherInstsOf = instNames => instNames.filter(n => !n.startsWith('Ibra - ') && n !== 'Other (Please Specify)');
+
 // ---------- the counting (same as generateCoursesPerOrganizerPdf) ----------
-function buildReportData(instNames, courses, log, fromStr, toStr) {
-    const ibraDepts = instNames.filter(n => n.startsWith('Ibra - ')).map(n => n.replace('Ibra - ', '').trim());
-    const otherInsts = instNames.filter(n => !n.startsWith('Ibra - ') && n !== 'Other (Please Specify)');
+// pick = { scope: 'all' } | { scope: 'ibra' | 'other', names: [...] }
+function buildReportData(instNames, courses, log, fromStr, toStr, pick = { scope: 'all' }) {
+    const ibraDepts = ibraDeptsOf(instNames);
+    const otherInsts = otherInstsOf(instNames);
     const findCI = (list, name) => list.find(n => n.toLowerCase() === String(name || '').trim().toLowerCase());
     const organizerRow = (type, rawName) => {
         const name = String(rawName || '').replace(/^Ibra - /i, '').trim();
@@ -230,12 +238,18 @@ function buildReportData(instNames, courses, log, fromStr, toStr) {
         const logged = loggedByKey.get(key) || 0;
         return { key, dept, organized, logged, total: organized + logged };
     };
-    const rows = ibraDepts.map(d => makeRow('Ibra|' + d, d));
+    let rows = ibraDepts.map(d => makeRow('Ibra|' + d, d));
     new Set([...organizedByKey.keys(), ...loggedByKey.keys()]).forEach(key => {
         if (!key.startsWith('Ibra|') || !ibraDepts.includes(key.slice(5))) {
             rows.push(makeRow(key, labelByKey.get(key) || key.split('|')[1]));
         }
     });
+    // Only the chosen departments / institutions (each one listed, 0 included).
+    if (pick.scope === 'ibra' || pick.scope === 'other') {
+        const prefix = pick.scope === 'ibra' ? 'Ibra|' : 'Other|';
+        const byKey = new Map(rows.map(r => [r.key, r]));
+        rows = pick.names.map(n => byKey.get(prefix + n) || makeRow(prefix + n, n));
+    }
     rows.sort((a, b) => b.total - a.total || a.dept.localeCompare(b.dept));
     return { rows, ibraDepts, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount };
 }
@@ -336,7 +350,7 @@ function drawFullHeader(doc, logo, title, infoLines) {
     drawText(doc, 'Ibra Hospital', 105, 48, { pt: 16, color: [20, 20, 20], align: 'center' });
     drawText(doc, 'Professional Development and Career Guidance', 105, 56, { pt: 12, color: [90, 90, 90], align: 'center' });
     drawText(doc, title, MARGIN, 68, { pt: 16, color: PURPLE_DARK, bold: true });
-    infoLines.forEach((line, i) => drawText(doc, line, MARGIN, 76 + i * 5.5, { pt: 9.5, color: [90, 90, 90] }));
+    infoLines.forEach((line, i) => drawText(doc, line, MARGIN, 76 + i * 5.5, { pt: 9.5, color: [90, 90, 90], maxWidth: CONTENT_W }));
     return 76 + infoLines.length * 5.5 + 4;
 }
 function drawMinimalHeader(doc, logo) {
@@ -372,12 +386,13 @@ async function getLogo() {
 }
 
 // ---------- the PDF ----------
-function buildPdf(report, { fromStr, toStr, logo }) {
+function buildPdf(report, { fromStr, toStr, logo, pick = { scope: 'all' } }) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const pageHeight = doc.internal.pageSize.getHeight();
     const BOTTOM = pageHeight - 18;
     const { rows, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount } = report;
+    const unit = pick.scope === 'other' ? 'Institution' : 'Department';
 
     const headed = new Set([1]);
     let continuing = null; // department name shown as "Continued: ..." on a new page
@@ -405,13 +420,20 @@ function buildPdf(report, { fromStr, toStr, logo }) {
         'Organized = activities from Create Activity (Organized By)',
         'Activity Log = courses logged in the Activity Log (one department + one date = one course)'
     ];
-    if (noOrganizerCount > 0) info.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
-    if (notShownCount > 0) info.push(`Not shown: ${notShownCount} from departments / institutions no longer in the list (deleted)`);
-    let y = drawFullHeader(doc, logo, 'Activities per Department Report', info);
+    if (pick.scope === 'all') {
+        if (noOrganizerCount > 0) info.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
+        if (notShownCount > 0) info.push(`Not shown: ${notShownCount} from departments / institutions no longer in the list (deleted)`);
+    } else {
+        const n = pick.names.length, what = unit + (n === 1 ? '' : 's');
+        const listed = pick.names.join(', ');
+        const chosenLine = n === 1 || (n <= 3 && listed.length <= 90) ? `${what}: ${listed}` : `${what}: ${n} chosen (listed in the table below)`;
+        info.splice(2, 0, ...(pick.scope === 'ibra' ? ['Institution: Ibra Hospital', chosenLine] : [chosenLine]));
+    }
+    let y = drawFullHeader(doc, logo, `Activities per ${unit} Report`, info);
 
     // Chart: one bar per department, Organized (dark) + Activity Log (light)
     y = room(y, 20);
-    drawText(doc, 'Activities per Department', MARGIN, y + 2, { pt: 12, color: [46, 16, 101], bold: true });
+    drawText(doc, `Activities per ${unit}`, MARGIN, y + 2, { pt: 12, color: [46, 16, 101], bold: true });
     doc.setFillColor(...PURPLE); doc.rect(MARGIN + 62, y - 0.8, 3, 3, 'F');
     drawText(doc, 'Organized', MARGIN + 66.5, y + 1.6, { pt: 8.5, color: [90, 90, 90] });
     doc.setFillColor(196, 181, 253); doc.rect(MARGIN + 84, y - 0.8, 3, 3, 'F');
@@ -434,7 +456,7 @@ function buildPdf(report, { fromStr, toStr, logo }) {
     const sum = f => rows.reduce((a, r) => a + r[f], 0);
     doc.autoTable({
         startY: room(y + 5, 20),
-        head: [['#', 'Department', 'Organized', 'Activity Log', 'Total']],
+        head: [['#', unit, 'Organized', 'Activity Log', 'Total']],
         body: rows.map((r, i) => [String(i + 1), cell(r.dept, 107, null, 9), String(r.organized), String(r.logged), String(r.total)]),
         foot: [[{ content: 'Total', colSpan: 2 }, String(sum('organized')), String(sum('logged')), String(sum('total'))]],
         theme: 'grid',
@@ -455,7 +477,7 @@ function buildPdf(report, { fromStr, toStr, logo }) {
     continuing = null;
     y = newPage();
     drawText(doc, 'Details — where the numbers come from', MARGIN, y + 2, { pt: 14, color: [46, 16, 101], bold: true });
-    drawText(doc, 'Organized: every activity counted for the department (Organized By in Create Activity).', MARGIN, y + 9, { pt: 9, color: [90, 90, 90] });
+    drawText(doc, `Organized: every activity counted for the ${unit.toLowerCase()} (Organized By in Create Activity).`, MARGIN, y + 9, { pt: 9, color: [90, 90, 90] });
     drawText(doc, 'Activity Log: one department + one date = one course; staff who logged the same department on the same day share one #.', MARGIN, y + 14, { pt: 9, color: [90, 90, 90] });
     y += 22;
 
@@ -547,16 +569,85 @@ function buildPdf(report, { fromStr, toStr, logo }) {
     return doc;
 }
 
-// ---------- the button ----------
 const note = document.getElementById('adminReportNote');
 const btn = document.getElementById('adminReportPrintBtn');
 const setNote = (text, isError) => { note.textContent = text || ''; note.className = 'admin-note' + (isError ? ' error' : text ? ' success' : ''); };
 
+// ---------- choose: All / Ibra departments / other institutions ----------
+const scopeSel = document.getElementById('adminReportScope');
+const pickBox = document.getElementById('adminReportPick');
+const pickList = document.getElementById('adminReportPickList');
+const pickSearch = document.getElementById('adminReportPickSearch');
+const pickCount = document.getElementById('adminReportPickCount');
+let instNamesNow = null; // the Institutions list, read when the page opens (and again on Print)
+
+async function loadInstitutionNames() {
+    const res = await fetchAllPaged(() => client.from('institutions').select('id, name').order('id', { ascending: true }));
+    if (res.error) throw res.error;
+    return (res.data || []).map(i => clean(i.name)).filter(Boolean);
+}
+const listFor = (scope, names) => [...new Set(scope === 'ibra' ? ibraDeptsOf(names) : otherInstsOf(names))].sort((a, b) => a.localeCompare(b));
+const chosenNames = () => [...new Set([...pickList.querySelectorAll('input:checked')].map(i => i.value))];
+function updatePickCount() { pickCount.textContent = `${chosenNames().length} selected`; }
+function renderPickList(keep = []) {
+    const scope = scopeSel.value;
+    pickBox.hidden = scope === 'all';
+    pickList.innerHTML = '';
+    pickSearch.value = '';
+    if (scope === 'all') return;
+    if (!instNamesNow) { pickList.innerHTML = '<div class="report-pick-empty">Could not load the list — reload the page.</div>'; updatePickCount(); return; }
+    const names = listFor(scope, instNamesNow);
+    if (names.length === 0) pickList.innerHTML = `<div class="report-pick-empty">No ${scope === 'ibra' ? 'Ibra departments' : 'other institutions'} in the list yet.</div>`;
+    names.forEach(n => {
+        const label = document.createElement('label');
+        const box = document.createElement('input'); box.type = 'checkbox'; box.value = n; box.checked = keep.includes(n);
+        const span = document.createElement('span'); span.textContent = n; span.dir = 'auto';
+        label.append(box, span); pickList.appendChild(label);
+    });
+    pickSearch.placeholder = scope === 'ibra' ? 'Search departments…' : 'Search institutions…';
+    updatePickCount();
+}
+let loading = null;
+function loadPickList() {
+    if (!loading) loading = loadInstitutionNames()
+        .then(names => { instNamesNow = names; })
+        .catch(err => { console.error('Report: could not load institutions:', err); })
+        .finally(() => { loading = null; renderPickList(); });
+    return loading;
+}
+scopeSel.addEventListener('change', () => {
+    setNote('');
+    if (!instNamesNow && scopeSel.value !== 'all') { pickBox.hidden = false; pickList.innerHTML = '<div class="report-pick-empty">Loading…</div>'; loadPickList(); }
+    else renderPickList();
+});
+pickList.addEventListener('change', updatePickCount);
+pickSearch.addEventListener('input', () => {
+    const q = pickSearch.value.trim().toLowerCase();
+    pickList.querySelectorAll('label').forEach(l => { l.hidden = !!q && !l.textContent.toLowerCase().includes(q); });
+});
+// "Select all" ticks what the search currently shows; "Clear" unticks everything.
+document.getElementById('adminReportPickAll').addEventListener('click', () => {
+    pickList.querySelectorAll('label:not([hidden]) input').forEach(i => { i.checked = true; }); updatePickCount();
+});
+document.getElementById('adminReportPickNone').addEventListener('click', () => {
+    pickList.querySelectorAll('input').forEach(i => { i.checked = false; }); updatePickCount();
+});
+loadPickList();
+
+const slug = s => clean(s).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+
+// ---------- the button ----------
 btn.addEventListener('click', async () => {
     const fromStr = document.getElementById('adminReportFrom').value;
     const toStr = document.getElementById('adminReportTo').value;
     if (fromStr && toStr && fromStr > toStr) { setNote('"From" is after "To" — please fix the dates.', true); return; }
     if (!window.jspdf || !window.jspdf.jsPDF || !window.jspdf.jsPDF.API.autoTable) { setNote('The PDF tools did not load — check the internet connection and reload the page.', true); return; }
+    const scope = scopeSel.value;
+    let names = scope === 'all' ? [] : chosenNames();
+    if (scope !== 'all' && names.length === 0) {
+        setNote(scope === 'ibra' ? 'Choose at least one department.' : 'Choose at least one institution.', true);
+        return;
+    }
 
     btn.disabled = true;
     setNote('Building the report…');
@@ -569,17 +660,32 @@ btn.addEventListener('click', async () => {
         ]);
         if (instRes.error) throw instRes.error;
         const instNames = (instRes.data || []).map(i => clean(i.name)).filter(Boolean);
-        const report = buildReportData(instNames, courses, log, fromStr, toStr);
-        if (report.ibraDepts.length === 0) { setNote('No Ibra departments exist yet.', true); return; }
+        // A chosen department / institution the admin deleted after this
+        // page was opened is left out (the list is refreshed).
+        let dropped = 0;
+        if (scope !== 'all') {
+            const current = listFor(scope, instNames);
+            const kept = names.filter(n => current.includes(n));
+            dropped = names.length - kept.length;
+            names = kept;
+            instNamesNow = instNames;
+            if (dropped > 0) renderPickList(names);
+            if (names.length === 0) { setNote(`The chosen ${scope === 'ibra' ? 'departments' : 'institutions'} no longer exist — the list was refreshed, please choose again.`, true); return; }
+        }
+        const pick = scope === 'all' ? { scope: 'all' } : { scope, names };
+        const report = buildReportData(instNames, courses, log, fromStr, toStr, pick);
+        if (scope === 'all' && report.ibraDepts.length === 0) { setNote('No Ibra departments exist yet.', true); return; }
 
         // Arabic is drawn with Noto Sans Arabic when it loaded (else the system's Arabic font).
         try { await Promise.all([document.fonts.load(`400 20px "Noto Sans Arabic"`, 'ع'), document.fonts.load(`700 20px "Noto Sans Arabic"`, 'ع')]); } catch { /* system font */ }
 
-        const doc = buildPdf(report, { fromStr, toStr, logo });
+        const doc = buildPdf(report, { fromStr, toStr, logo, pick });
         addFooters(doc);
-        const name = `Activities-per-Department_${fromStr || 'start'}_to_${toStr || 'today'}.pdf`;
+        const part = scope === 'all' ? '' : '_' + (names.length === 1 ? slug(names[0]) : `${names.length}-${scope === 'ibra' ? 'departments' : 'institutions'}`);
+        const name = `Activities-per-Department${part}_${fromStr || 'start'}_to_${toStr || 'today'}.pdf`;
         doc.save(name);
-        setNote(`Done — ${name} was downloaded (${doc.internal.getNumberOfPages()} pages).`);
+        setNote(`Done — ${name} was downloaded (${doc.internal.getNumberOfPages()} pages).`
+            + (dropped > 0 ? ` ${dropped} chosen ${dropped === 1 ? 'one no longer exists and was' : 'ones no longer exist and were'} left out.` : ''));
     } catch (err) {
         console.error('Admin report failed:', err);
         setNote('Something went wrong: ' + (err && err.message ? err.message : err), true);
