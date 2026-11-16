@@ -16,6 +16,10 @@
 //   - v2: the report can cover "All", or Ibra Hospital + one or more chosen
 //     departments, or other institutions + one or more chosen institutions
 //     (the picker lists the Institutions table as it is now).
+//   - v3: Activity Log counts only entries written in Activity Log
+//     activities ("without attendance"). Entries that ended up in an
+//     activity with attendance (its Activity Log link opened by hand) are
+//     left out and counted in a "Not counted" header line.
 // Then a details section per department with what is behind each number:
 // activity names, and the Activity Log titles, dates, staff name / number /
 // phone (a missing name or phone is filled from the person's profile).
@@ -120,6 +124,23 @@ async function fetchActivityLog(fromStr, toStr) {
     let entries = entriesRes.data || [];
     if (fromStr || toStr) entries = entries.filter(e => isWithinRange(e.entry_date_from, fromStr, toStr));
 
+    // Only entries written in an Activity Log activity ("without
+    // attendance"). An activity with attendance has no Activity Log, so
+    // entries found there are left out (and counted for the header line).
+    let notLogActivityCount = 0;
+    const logCoursesRes = await fetchAllPaged(() => client.from('courses').select('id')
+        .eq('attendance_required', false).order('id', { ascending: true }));
+    if (!logCoursesRes.error) {
+        const logCourseIds = new Set((logCoursesRes.data || []).map(c => c.id));
+        const regCourses = await fetchRowsIn('registrations', 'id, course_id', 'id', entries.map(e => e.registration_id));
+        const inLogActivity = new Set(regCourses.filter(r => logCourseIds.has(r.course_id)).map(r => r.id));
+        notLogActivityCount = entries.filter(e => !inLogActivity.has(e.registration_id)).length;
+        entries = entries.filter(e => inLogActivity.has(e.registration_id));
+    } else {
+        // Older database without courses.attendance_required: count as before.
+        console.warn('Report: could not read which activities have an Activity Log:', logCoursesRes.error);
+    }
+
     const groupByDeptDate = new Map();
     const countByDept = new Map();
     const groupsByDept = new Map();
@@ -164,7 +185,7 @@ async function fetchActivityLog(fromStr, toStr) {
     } catch (lookupErr) {
         console.warn('Report: staff details lookup failed:', lookupErr);
     }
-    return { countByDept, groupsByDept };
+    return { countByDept, groupsByDept, notLogActivityCount };
 }
 
 // The two lists the report can be narrowed to (same split everywhere).
@@ -251,7 +272,7 @@ function buildReportData(instNames, courses, log, fromStr, toStr, pick = { scope
         rows = pick.names.map(n => byKey.get(prefix + n) || makeRow(prefix + n, n));
     }
     rows.sort((a, b) => b.total - a.total || a.dept.localeCompare(b.dept));
-    return { rows, ibraDepts, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount };
+    return { rows, ibraDepts, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount, notLogActivityCount: log.notLogActivityCount || 0 };
 }
 
 // ---------- text the PDF fonts can't draw (Arabic...) -> browser-drawn image ----------
@@ -391,7 +412,7 @@ function buildPdf(report, { fromStr, toStr, logo, pick = { scope: 'all' } }) {
     const doc = new jsPDF();
     const pageHeight = doc.internal.pageSize.getHeight();
     const BOTTOM = pageHeight - 18;
-    const { rows, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount } = report;
+    const { rows, organizedCoursesByKey, loggedGroupsByKey, noOrganizerCount, notShownCount, notLogActivityCount } = report;
     const unit = pick.scope === 'other' ? 'Institution' : 'Department';
 
     const headed = new Set([1]);
@@ -418,11 +439,12 @@ function buildPdf(report, { fromStr, toStr, logo, pick = { scope: 'all' } }) {
         `Generated: ${formatDateDDMMYYYY(now.toISOString())} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         `Period: ${period}`,
         'Organized = activities from Create Activity (Organized By)',
-        'Activity Log = courses logged in the Activity Log (one department + one date = one course)'
+        'Activity Log = courses logged in Activity Log activities (one department + one date = one course)'
     ];
     if (pick.scope === 'all') {
         if (noOrganizerCount > 0) info.push(`Activities with no organizer (None): ${noOrganizerCount} — not counted below`);
         if (notShownCount > 0) info.push(`Not shown: ${notShownCount} from departments / institutions no longer in the list (deleted)`);
+        if (notLogActivityCount > 0) info.push(`Not counted: ${notLogActivityCount} Activity Log ${notLogActivityCount === 1 ? 'entry' : 'entries'} written in activities with attendance`);
     } else {
         const n = pick.names.length, what = unit + (n === 1 ? '' : 's');
         const listed = pick.names.join(', ');
